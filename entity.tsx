@@ -1,31 +1,43 @@
 // src/components/EnhancedEntityPicker/EnhancedEntityPicker.tsx
 
 import React, { useState, useEffect, useMemo } from "react";
-import {
-  FieldExtensionComponentProps,
-  useApi,
-} from "@backstage/plugin-scaffolder-react";
+import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
+import { useApi } from "@backstage/core-plugin-api";
 import {
   catalogApiRef,
   humanizeEntityRef,
-  getEntityTitle,
 } from "@backstage/plugin-catalog-react";
 import {
   Entity,
-  CompoundEntityRef,
   parseEntityRef,
-  getEntityRef,
+  stringifyEntityRef,
 } from "@backstage/catalog-model";
-import { Autocomplete } from "@material-ui/lab";
-import {
-  TextField,
-  CircularProgress,
-  Box,
-  Typography,
-} from "@material-ui/core";
-import { get } from "lodash"; // For safe deep-access to object properties
 
-import { EnhancedEntityPickerUiOptions } from "./types"; // Your defined types
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
+import CircularProgress from "@mui/material/CircularProgress";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+
+import { get } from "lodash"; // For safe deep-access to object properties
+import { EntityPickerUiOptions as StandardEntityPickerUiOptions } from "@backstage/plugin-scaffolder";
+
+// Your custom UI options as well as EntityPicker that includes all standard options
+export interface CustomEntityPickerUiOptions
+  extends StandardEntityPickerUiOptions {
+  /**
+   * Specifies the path within the entity object to use for display in the dropdown.
+   * Defaults to 'metadata.name'.
+   * Examples: 'metadata.title', 'spec.profile.displayName', 'metadata.annotations["custom.org/identifier"]'
+   */
+  displayEntityField?: string;
+
+  /**
+   * Optional: A secondary path to display alongside the primary display field in the dropdown.
+   * Example: 'metadata.namespace' or 'spec.type'
+   */
+  secondaryDisplayEntityField?: string;
+}
 
 // Helper to get display value from entity using a path string
 const getDisplayValue = (
@@ -46,7 +58,7 @@ const getDisplayValue = (
 };
 
 export const EnhancedEntityPicker: React.FC<
-  FieldExtensionComponentProps<string | string[], EnhancedEntityPickerUiOptions> // Supports string or array for multi-select if needed
+  FieldExtensionComponentProps<string | string[], CustomEntityPickerUiOptions> // Supports string or array for multi-select if needed
 > = (props) => {
   const {
     schema,
@@ -58,7 +70,7 @@ export const EnhancedEntityPicker: React.FC<
     disabled,
   } = props;
   const options = uiSchema["ui:options"] as
-    | EnhancedEntityPickerUiOptions
+    | CustomEntityPickerUiOptions
     | undefined;
 
   const [inputValue, setInputValue] = useState("");
@@ -117,7 +129,7 @@ export const EnhancedEntityPicker: React.FC<
       .finally(() => {
         setLoading(false);
       });
-  }, [catalogApi, catalogFilter, allowedKinds, defaultKind]);
+  }, [catalogFilter, allowedKinds, defaultKind]);
 
   // Find the selected entity object from formData (which is an entity ref string)
   const selectedEntity = useMemo(() => {
@@ -150,7 +162,7 @@ export const EnhancedEntityPicker: React.FC<
       }
     } else if (value) {
       // Entity object selected
-      onChange(getEntityRef(value));
+      onChange(stringifyEntityRef(value));
     } else {
       // Cleared
       onChange(undefined);
@@ -162,23 +174,32 @@ export const EnhancedEntityPicker: React.FC<
       return option; // For arbitrary values
     }
     // For entity objects, use the custom display field
-    return getDisplayValue(option, displayEntityField, getEntityTitle(option));
+    return getDisplayValue(
+      option,
+      displayEntityField,
+      humanizeEntityRef(option)
+    );
   };
 
   const renderOption = (
-    option: Entity | string,
-    state: { inputValue: string }
+    props: React.HTMLAttributes<HTMLLIElement>,
+    option: Entity | string
+    // state: { inputValue: string }
   ) => {
     if (typeof option === "string") {
-      return <Typography>{option}</Typography>;
+      return (
+        <li {...props}>
+          <Typography>{option}</Typography>;
+        </li>
+      );
     }
 
     const primaryText = getDisplayValue(
       option,
       displayEntityField,
-      getEntityTitle(option)
+      humanizeEntityRef(option)
     );
-    let secondaryText = "";
+    let secondaryText: string;
     if (secondaryDisplayEntityField) {
       secondaryText = getDisplayValue(option, secondaryDisplayEntityField, "");
     } else {
@@ -188,14 +209,16 @@ export const EnhancedEntityPicker: React.FC<
     }
 
     return (
-      <Box>
-        <Typography variant="body1">{primaryText}</Typography>
-        {secondaryText && (
-          <Typography variant="caption" color="textSecondary">
-            {secondaryText}
-          </Typography>
-        )}
-      </Box>
+      <li {...props}>
+        <Box>
+          <Typography variant="body1">{primaryText}</Typography>
+          {secondaryText && (
+            <Typography variant="caption" color="textSecondary">
+              {secondaryText}
+            </Typography>
+          )}
+        </Box>
+      </li>
     );
   };
 
@@ -212,17 +235,13 @@ export const EnhancedEntityPicker: React.FC<
         setInputValue(newInputValue);
       }}
       onChange={handleAutocompleteChange}
-      options={
-        allowArbitraryValues
-          ? [...fetchedEntities, inputValue.trim()].filter(Boolean)
-          : fetchedEntities
-      }
+      options={fetchedEntities}
       getOptionLabel={getOptionLabel}
       renderOption={renderOption}
       loading={loading}
       disabled={disabled}
       freeSolo={allowArbitraryValues}
-      getOptionSelected={(option, val) => {
+      isOptionEqualToValue={(option, val) => {
         if (typeof option === "string" && typeof val === "string")
           return option === val;
         if (
@@ -231,7 +250,7 @@ export const EnhancedEntityPicker: React.FC<
           val &&
           option
         ) {
-          return getEntityRef(option) === getEntityRef(val);
+          return stringifyEntityRef(option) === stringifyEntityRef(val);
         }
         return false;
       }}

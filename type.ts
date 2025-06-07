@@ -34,3 +34,16 @@ export interface EnhancedEntityPickerUiOptions
    */
   secondaryDisplayEntityField?: string;
 }
+
+/**
+ * secondaryOwner:
+	title: Secondary Owner
+	type: string
+	description: you will be primary owner, please choose a secondary owner
+	ui:field: EnhancedEntityPicker
+	ui:options:
+		
+		catalogFilter:
+			kind: User
+ * 
+ */

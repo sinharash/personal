@@ -1,0 +1,35 @@
+# Notice the v1beta3 version
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+# some metadata about the template itself
+metadata:
+  name: create-workspace
+  title: Test Action template
+  description: scaffolder v1beta3 template demo
+spec:
+  owner: backstage/techdocs-core
+  type: service
+
+  # these are the steps which are rendered in the frontend with the form input
+  parameters:
+    - title: workspace information
+      required:
+        - secondaryOwner
+      properties:
+        secondaryOwner:
+          title: Secondary Owner
+          type: string
+          description: please choose secondary owner
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityField: spec.profile.displayName
+            catalogFilter:
+              - kind: User
+
+  # here's the steps that are executed in series in the scaffolder backend
+  steps:
+    - id: fetch-user
+      name: Fetch User Entity
+      action: catalog:fetch
+      input:
+        entityRef: ${{ parameters.secondaryOnwer }}
