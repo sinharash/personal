@@ -1,0 +1,100 @@
+# The API version for the scaffolder template
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+
+# Metadata about the template itself
+metadata:
+  name: enhanced-picker-demo-template
+  title: Enhanced Entity Picker Demo
+  description: A template demonstrating a powerful, custom entity picker.
+spec:
+  owner: user:guest # Change to a valid owner in your Backstage instance
+  type: service # The type of component being created
+
+  # The parameters block defines the form fields presented to the user.
+  parameters:
+    - title: Fill in the component details
+      required:
+        - componentName
+        - secondaryOwner
+      properties:
+        componentName:
+          title: Component Name
+          type: string
+          description: A unique name for the component.
+          ui:autofocus: true
+
+        # This is the parameter our custom component is responsible for.
+        secondaryOwner:
+          title: Secondary Owner
+          type: object # <-- IMPORTANT: The parameter type is 'object'.
+          description: Choose a secondary owner for this component.
+          ui:field: EnhancedEntityPicker # <-- Binds this object to our custom React component.
+
+          # --- Configuration for our custom picker ---
+          ui:options:
+            # This filter is passed to the Catalog API to fetch the list of entities.
+            catalogFilter:
+              kind: User
+
+            # The 'output' map is the most important option. It defines the object
+            # that our picker will create when a user makes a selection.
+            # The keys here ('displayValue', 'ref', etc.) MUST match the keys
+            # in the 'properties' block below.
+            output:
+              # This will be the only VISIBLE value on the review page.
+              displayValue: "${spec.profile.displayName} (${metadata.name})"
+
+              # --- These values will be HIDDEN but available to backend steps ---
+              ref: "${entity.ref}" # A special keyword for the entity reference string
+              email: "${spec.profile.email}"
+              name: "${metadata.name}"
+
+          # --- Schema for the object our picker creates. This is crucial for hiding fields. ---
+          properties:
+            # This property will be visible on the review page with its title.
+            displayValue:
+              title: Selected Owner # This title appears on the review page
+              type: string
+
+            # These properties will be hidden from ALL UI, including the review page,
+            # because of `ui:widget: 'hidden'`.
+            ref:
+              type: string
+              ui:widget: "hidden"
+            email:
+              type: string
+              ui:widget: "hidden"
+            name:
+              type: string
+              ui:widget: "hidden"
+
+  # These are the backend steps that run after the user clicks "CREATE".
+  steps:
+    - id: log-data
+      name: Log Selected Data
+      action: debug:log
+      input:
+        message: |
+          The full data object for the selected owner is: ${{ parameters.secondaryOwner | dump }}
+          The entity reference to use in the next step is: ${{ parameters.secondaryOwner.ref }}
+          The user's email is: ${{ parameters.secondaryOwner.email }}
+
+    - id: fetch-entity
+      name: Fetch Catalog Entity
+      action: catalog:fetch
+      input:
+        # We use the 'ref' property from our hidden data object.
+        entityRef: ${{ parameters.secondaryOwner.ref }}
+
+    - id: final-log
+      name: Final Log
+      action: debug:log
+      input:
+        message: "This template will create '${{ parameters.componentName }}' with the secondary owner set to '${{ parameters.secondaryOwner.displayValue }}'."
+
+    # - id: register
+    #   name: Register
+    #   action: catalog:register
+    #   input:
+    #     catalogInfoUrl: ./catalog-info.yaml
