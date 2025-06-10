@@ -1,0 +1,37 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: example-template
+  title: Example Template with Enhanced Entity Picker
+  description: Demonstrates the EnhancedEntityPicker
+spec:
+  owner: user:default/example-owner
+  type: service
+  parameters:
+    - title: Basic Information
+      required:
+        - name
+        - secondaryOwner
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Name of the component
+        secondaryOwner:
+          title: Secondary Owner
+          type: string
+          description: you will be primary owner, please choose a secondary owner
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: ${{ metadata.name }} (${{  spec.profile.email }} )
+            catalogFilter:
+              kind: User
+
+  steps:
+    - id: fetch-info
+      name: Fetch Information
+      action: debug:log
+      input:
+        message: "Selected secondary owner: ${{ parameters.secondaryOwner }}"
+        # You can use the entity data in a custom action that can access the global store
+        # This serves as a demonstration of what data is available
