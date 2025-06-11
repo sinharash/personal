@@ -1,0 +1,66 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: example-template
+  title: Example Template with Enhanced Entity Picker
+  description: An example template that demonstrates the EnhancedEntityPicker
+spec:
+  owner: group:default/developers
+  type: service
+  parameters:
+    - title: Basic Information
+      required:
+        - name
+        - owner
+        - secondaryOwner
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Name of the component
+          ui:autofocus: true
+        owner:
+          title: Owner
+          type: string
+          description: Owner of the component
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+        secondaryOwner:
+          title: Secondary Owner
+          type: object
+          description: You will be primary owner, please choose a secondary owner
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: ${{ metadata.name }} (${{ spec.profile.email }})
+            catalogFilter:
+              kind: User
+
+  steps:
+    - id: fetch-data
+      name: Fetch data
+      action: debug:log
+      input:
+        message: |
+          Selected Secondary Owner Information:
+          Name: ${{ parameters.secondaryOwner.entity.metadata.name }}
+          Email: ${{ parameters.secondaryOwner.entity.spec.profile.email }}
+          Entity Ref: ${{ parameters.secondaryOwner.entityRef }}
+          Formatted Display: ${{ parameters.secondaryOwner.formatted }}
+
+    - id: template
+      name: Fetch Template
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          secondaryOwner: ${{ parameters.secondaryOwner.formatted }}
+          secondaryOwnerEmail: ${{ parameters.secondaryOwner.entity.spec.profile.email }}
+
+  output:
+    links:
+      - title: Open Component
+        url: catalog/${{ parameters.name }}
