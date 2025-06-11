@@ -31,7 +31,7 @@ spec:
     # First, fetch the complete entity data
     - id: fetch-secondary-owner
       name: Fetch Secondary Owner
-      action: catalog:fetch-entity
+      action: catalog:fetch
       input:
         entityRef: ${{ parameters.secondaryOwner }}
 

@@ -9,14 +9,14 @@ import {
   FormControl,
   FormHelperText,
 } from "@mui/material";
-import { FieldProps } from "@rjsf/core";
+import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { useAsync } from "react-use";
 import templateString from "lodash/template";
 
 /**
  * Props for the EnhancedEntityPicker component
  */
-interface EnhancedEntityPickerProps extends FieldProps {
+interface EnhancedEntityPickerProps extends FieldExtensionComponentProps<any> {
   uiOptions: {
     catalogFilter?: {
       kind?: string;
