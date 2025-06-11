@@ -27,38 +27,32 @@ export interface EntityPickerProps {
   formData?: any;
 }
 
-// Create a hidden metadata string that can be parsed later
-// Format is: entityName::displayValue
-// This keeps only the display value visible in review
-const createEntityString = (
-  entityRef: string,
-  displayValue: string
-): string => {
-  // Base64 encode the entity reference to avoid issues with special characters
-  const encodedRef = btoa(entityRef);
-  return `${displayValue}::${encodedRef}`;
-};
+// Custom class for entity values that will display correctly in review
+class FormattedEntityRef extends String {
+  private readonly _entityRef: string;
+  private readonly _displayValue: string;
 
-// Extract just the display part for rendering
-const getDisplayPart = (value: string): string => {
-  if (!value || !value.includes("::")) return value;
-  return value.split("::")[0];
-};
+  constructor(entityRef: string, displayValue: string) {
+    // Call the String constructor with just the display value
+    // This ensures that string operations and toString() show only the display value
+    super(displayValue);
 
-// Extract the entity reference (for action)
-const getEntityRef = (value: string): string => {
-  if (!value || !value.includes("::")) return value;
-  try {
-    const parts = value.split("::");
-    if (parts.length >= 2) {
-      return atob(parts[parts.length - 1]);
-    }
-  } catch (e) {
-    // If decoding fails, just return the original value
-    console.warn("Failed to decode entity reference", e);
+    this._entityRef = entityRef;
+    this._displayValue = displayValue;
   }
-  return value;
-};
+
+  // This method is used when the object is serialized to JSON
+  toJSON() {
+    // Return a special format that can be parsed by the action
+    // But starts with the display value so that's what shows in review
+    return `${this._displayValue}::${btoa(this._entityRef)}`;
+  }
+
+  // Add a way to access the entity reference if needed
+  getEntityRef(): string {
+    return this._entityRef;
+  }
+}
 
 export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
   const { onChange, schema, required, uiSchema, formData } = props;
@@ -73,13 +67,6 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
   const displayFormat =
     uiSchema?.["ui:options"]?.displayEntityFieldAfterFormatting ||
     "${entity.metadata.name}";
-
-  // Parse current value if it's our special format
-  useEffect(() => {
-    if (formData) {
-      setInputValue(getDisplayPart(formData));
-    }
-  }, [formData]);
 
   // Function to format entity data according to the template
   const formatEntityDisplay = (entity: Entity | null): string => {
@@ -151,17 +138,33 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
       // Format the display value
       const formattedValue = formatEntityDisplay(newValue);
 
-      // Create the special string format with hidden metadata
+      // Create our custom string class instance
       const entityRef = newValue.metadata.name;
-      const specialValue = createEntityString(entityRef, formattedValue);
+      const formattedRef = new FormattedEntityRef(entityRef, formattedValue);
 
-      // Set the string value
+      // Set input value for display
       setInputValue(formattedValue);
-      onChange(specialValue);
+
+      // Use the FormattedEntityRef object - it will stringify correctly
+      onChange(formattedRef);
+
+      // Debug
+      console.debug("Selected entity:", {
+        entity: newValue,
+        formatted: formattedValue,
+        value: formattedRef.toString(),
+        json: JSON.stringify(formattedRef),
+      });
     } else {
       setInputValue("");
       onChange(undefined);
     }
+  };
+
+  // Extract display value from a string that might be our special format
+  const extractDisplayValue = (value: string): string => {
+    if (!value || !value.includes("::")) return value;
+    return value.split("::")[0];
   };
 
   return (
@@ -170,7 +173,7 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
       options={entities}
       getOptionLabel={(option: Entity | string) => {
         if (typeof option === "string") {
-          return getDisplayPart(option);
+          return extractDisplayValue(option);
         }
         return formatEntityDisplay(option);
       }}
@@ -197,3 +200,203 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
     />
   );
 };
+
+// import React, { useState, useEffect } from "react";
+// import { useApi } from "@backstage/core-plugin-api";
+// import { catalogApiRef } from "@backstage/plugin-catalog-react";
+// import { TextField, Autocomplete } from "@mui/material";
+// import { Entity } from "@backstage/catalog-model";
+
+// // Type definitions for the UI Schema options
+// interface EntityPickerUiOptions {
+//   catalogFilter?: {
+//     kind?: string;
+//     [key: string]: string | undefined;
+//   };
+//   displayEntityFieldAfterFormatting?: string;
+// }
+
+// // Type for the component props from the scaffolder
+// export interface EntityPickerProps {
+//   onChange: (value: any) => void;
+//   schema: {
+//     title?: string;
+//     description?: string;
+//   };
+//   required?: boolean;
+//   uiSchema?: {
+//     "ui:options"?: EntityPickerUiOptions;
+//   };
+//   formData?: any;
+// }
+
+// // Create a hidden metadata string that can be parsed later
+// // Format is: entityName::displayValue
+// // This keeps only the display value visible in review
+// const createEntityString = (
+//   entityRef: string,
+//   displayValue: string
+// ): string => {
+//   // Base64 encode the entity reference to avoid issues with special characters
+//   const encodedRef = btoa(entityRef);
+//   return `${displayValue}::${encodedRef}`;
+// };
+
+// // Extract just the display part for rendering
+// const getDisplayPart = (value: string): string => {
+//   if (!value || !value.includes("::")) return value;
+//   return value.split("::")[0];
+// };
+
+// // Extract the entity reference (for action)
+// const getEntityRef = (value: string): string => {
+//   if (!value || !value.includes("::")) return value;
+//   try {
+//     const parts = value.split("::");
+//     if (parts.length >= 2) {
+//       return atob(parts[parts.length - 1]);
+//     }
+//   } catch (e) {
+//     // If decoding fails, just return the original value
+//     console.warn("Failed to decode entity reference", e);
+//   }
+//   return value;
+// };
+
+// export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
+//   const { onChange, schema, required, uiSchema, formData } = props;
+//   const catalogApi = useApi(catalogApiRef);
+//   const [loading, setLoading] = useState<boolean>(true);
+//   const [entities, setEntities] = useState<Entity[]>([]);
+//   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
+//   const [inputValue, setInputValue] = useState<string>("");
+
+//   // Get options from uiSchema
+//   const catalogFilter = uiSchema?.["ui:options"]?.catalogFilter || {};
+//   const displayFormat =
+//     uiSchema?.["ui:options"]?.displayEntityFieldAfterFormatting ||
+//     "${entity.metadata.name}";
+
+//   // Parse current value if it's our special format
+//   useEffect(() => {
+//     if (formData) {
+//       setInputValue(getDisplayPart(formData));
+//     }
+//   }, [formData]);
+
+//   // Function to format entity data according to the template
+//   const formatEntityDisplay = (entity: Entity | null): string => {
+//     if (!entity) return "";
+
+//     let formatted = displayFormat;
+//     // Match patterns like ${{ metadata.name }}
+//     const regex = /\$\{\{\s*([^}]+)\s*\}\}/g;
+
+//     return formatted.replace(regex, (_match, path) => {
+//       // Traverse the entity object based on the path
+//       const properties = path.trim().split(".");
+//       let value: any = entity;
+
+//       for (const prop of properties) {
+//         if (value && value[prop] !== undefined) {
+//           value = value[prop];
+//         } else {
+//           return ""; // Property not found
+//         }
+//       }
+
+//       return value !== null && value !== undefined ? value.toString() : "";
+//     });
+//   };
+
+//   // Fetch entities based on the filter
+//   useEffect(() => {
+//     const fetchEntities = async () => {
+//       setLoading(true);
+//       try {
+//         const filter: Record<string, string> = {};
+
+//         // Add kind filter if specified
+//         if (catalogFilter.kind) {
+//           filter.kind = catalogFilter.kind;
+//         }
+
+//         // Add any additional filters
+//         Object.entries(catalogFilter).forEach(([key, value]) => {
+//           if (key !== "kind" && value) {
+//             filter[key] = value;
+//           }
+//         });
+
+//         const response = await catalogApi.getEntities({
+//           filter: [filter],
+//         });
+
+//         setEntities(response.items);
+//       } catch (error) {
+//         console.error("Error fetching entities:", error);
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchEntities();
+//   }, [catalogApi, catalogFilter]);
+
+//   // Handle selection change
+//   const handleChange = (
+//     _event: React.SyntheticEvent,
+//     newValue: Entity | null
+//   ) => {
+//     setSelectedEntity(newValue);
+
+//     if (newValue) {
+//       // Format the display value
+//       const formattedValue = formatEntityDisplay(newValue);
+
+//       // Create the special string format with hidden metadata
+//       const entityRef = newValue.metadata.name;
+//       const specialValue = createEntityString(entityRef, formattedValue);
+
+//       // Set the string value
+//       setInputValue(formattedValue);
+//       onChange(specialValue);
+//     } else {
+//       setInputValue("");
+//       onChange(undefined);
+//     }
+//   };
+
+//   return (
+//     <Autocomplete
+//       loading={loading}
+//       options={entities}
+//       getOptionLabel={(option: Entity | string) => {
+//         if (typeof option === "string") {
+//           return getDisplayPart(option);
+//         }
+//         return formatEntityDisplay(option);
+//       }}
+//       renderOption={(props, option: Entity) => (
+//         <li {...props}>{formatEntityDisplay(option)}</li>
+//       )}
+//       onChange={handleChange}
+//       value={selectedEntity}
+//       inputValue={inputValue}
+//       onInputChange={(_event, newInputValue) => {
+//         setInputValue(newInputValue);
+//       }}
+//       renderInput={(params) => (
+//         <TextField
+//           {...params}
+//           label={schema.title}
+//           required={required}
+//           helperText={schema.description}
+//           variant="outlined"
+//           fullWidth
+//         />
+//       )}
+//       fullWidth
+//     />
+//   );
+// };
