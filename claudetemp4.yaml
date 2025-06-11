@@ -1,0 +1,61 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: example-template
+  title: Example Template with Enhanced Entity Picker
+  description: Demonstrates the EnhancedEntityPicker
+spec:
+  owner: user:default/example-owner
+  type: service
+  parameters:
+    - title: Basic Information
+      required:
+        - name
+        - secondaryOwner
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Name of the component
+        secondaryOwner:
+          title: Secondary Owner
+          type: string
+          description: you will be primary owner, please choose a secondary owner
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: ${{ metadata.name }} (${{  spec.profile.email }} )
+            catalogFilter:
+              kind: User
+
+  steps:
+    # First, fetch the complete entity data
+    - id: fetch-secondary-owner
+      name: Fetch Secondary Owner
+      action: catalog:fetch-entity
+      input:
+        entityRef: ${{ parameters.secondaryOwner }}
+
+    # Now you can use any property from the entity in subsequent steps
+    - id: log-secondary-owner
+      name: Log Secondary Owner Details
+      action: debug:log
+      input:
+        message: "Selected secondary owner: ${{ parameters.secondaryOwner }}"
+        name: "${{ steps['fetch-secondary-owner'].output.name }}"
+        email: "${{ steps['fetch-secondary-owner'].output.email }}"
+        jobTitle: "${{ steps['fetch-secondary-owner'].output.spec.profile.jobTitle }}"
+
+    # Example of using the data in another step
+    - id: generate-owners-file
+      name: Generate OWNERS file
+      action: fs:write
+      input:
+        path: OWNERS
+        content: |
+          # Primary owner
+          primary: default-user@example.com
+
+          # Secondary owner
+          secondary: ${{ steps['fetch-secondary-owner'].output.email }}
+          secondary_name: ${{ steps['fetch-secondary-owner'].output.name }}
+          secondary_title: ${{ steps['fetch-secondary-owner'].output.spec.profile.jobTitle || 'N/A' }}
