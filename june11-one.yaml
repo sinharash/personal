@@ -1,66 +1,371 @@
+# Complete Working Example - No Custom Actions Needed!
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: example-template
-  title: Example Template with Enhanced Entity Picker
-  description: An example template that demonstrates the EnhancedEntityPicker
+  name: enhanced-entity-picker-complete
+  title: Complete Enhanced Entity Picker Example
+  description: Access full entity data without custom actions
 spec:
-  owner: group:default/developers
-  type: service
+  owner: platform-team
+  type: example
+
   parameters:
-    - title: Basic Information
+    - title: Project Configuration
       required:
         - name
-        - owner
         - secondaryOwner
       properties:
         name:
           title: Name
           type: string
-          description: Name of the component
-          ui:autofocus: true
-        owner:
-          title: Owner
-          type: string
-          description: Owner of the component
-          ui:field: EntityPicker
-          ui:options:
-            catalogFilter:
-              kind: Group
+          description: Unique name of the component
+
         secondaryOwner:
           title: Secondary Owner
-          type: object
-          description: You will be primary owner, please choose a secondary owner
+          type: string
+          description: Choose a secondary owner for this project
           ui:field: EnhancedEntityPicker
           ui:options:
-            displayEntityFieldAfterFormatting: ${{ metadata.name }} (${{ spec.profile.email }})
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} (${{ spec.profile.email }})"
             catalogFilter:
               kind: User
+            exposeEntityData: true
+
+        # Hidden fields that get auto-populated by the component
+        secondaryOwner_name:
+          type: string
+          ui:widget: hidden
+
+        secondaryOwner_email:
+          type: string
+          ui:widget: hidden
+
+        secondaryOwner_entityRef:
+          type: string
+          ui:widget: hidden
+
+        secondaryOwner_department:
+          type: string
+          ui:widget: hidden
+
+        secondaryOwner_displayName:
+          type: string
+          ui:widget: hidden
+
+        teamLead:
+          title: Team Lead
+          type: string
+          description: Select the team lead
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ spec.profile.title || 'Team Lead' }}"
+            catalogFilter:
+              kind: User
+              "spec.profile.role": "team-lead"
+            exposeEntityData: true
+
+        # Auto-populated fields for team lead
+        teamLead_name:
+          type: string
+          ui:widget: hidden
+
+        teamLead_email:
+          type: string
+          ui:widget: hidden
+
+        teamLead_entityRef:
+          type: string
+          ui:widget: hidden
 
   steps:
-    - id: fetch-data
-      name: Fetch data
+    - id: log-all-data
+      name: Log All Available Data
       action: debug:log
       input:
         message: |
-          Selected Secondary Owner Information:
-          Name: ${{ parameters.secondaryOwner.entity.metadata.name }}
-          Email: ${{ parameters.secondaryOwner.entity.spec.profile.email }}
-          Entity Ref: ${{ parameters.secondaryOwner.entityRef }}
-          Formatted Display: ${{ parameters.secondaryOwner.formatted }}
+          🎯 CLEAN DISPLAY VALUES (What user sees):
+          - Secondary Owner: ${{ parameters.secondaryOwner }}
+          - Team Lead: ${{ parameters.teamLead }}
 
-    - id: template
-      name: Fetch Template
-      action: fetch:template
+          📊 FULL ENTITY DATA (Auto-extracted):
+
+          Secondary Owner Details:
+          - Name: ${{ parameters.secondaryOwner_name }}
+          - Email: ${{ parameters.secondaryOwner_email }}
+          - Entity Ref: ${{ parameters.secondaryOwner_entityRef }}
+          - Display Name: ${{ parameters.secondaryOwner_displayName }}
+          - Department: ${{ parameters.secondaryOwner_department }}
+
+          Team Lead Details:
+          - Name: ${{ parameters.teamLead_name }}
+          - Email: ${{ parameters.teamLead_email }}
+          - Entity Ref: ${{ parameters.teamLead_entityRef }}
+
+    - id: create-ownership-file
+      name: Create Ownership File
+      action: fs:write
       input:
-        url: ./skeleton
-        values:
-          name: ${{ parameters.name }}
-          owner: ${{ parameters.owner }}
-          secondaryOwner: ${{ parameters.secondaryOwner.formatted }}
-          secondaryOwnerEmail: ${{ parameters.secondaryOwner.entity.spec.profile.email }}
+        path: ./OWNERS.md
+        content: |
+          # Project Ownership
 
-  output:
-    links:
-      - title: Open Component
-        url: catalog/${{ parameters.name }}
+          **Project**: ${{ parameters.name }}
+
+          ## Owners
+
+          ### Secondary Owner
+          - **Name**: ${{ parameters.secondaryOwner_displayName }}
+          - **Email**: ${{ parameters.secondaryOwner_email }}
+          - **Department**: ${{ parameters.secondaryOwner_department }}
+          - **Backstage Entity**: ${{ parameters.secondaryOwner_entityRef }}
+
+          ### Team Lead  
+          - **Name**: ${{ parameters.teamLead_name }}
+          - **Email**: ${{ parameters.teamLead_email }}
+          - **Backstage Entity**: ${{ parameters.teamLead_entityRef }}
+
+          ---
+          *Generated on ${{ '' | now }}*
+
+    - id: create-catalog-info
+      name: Create Catalog Info
+      action: fs:write
+      input:
+        path: ./catalog-info.yaml
+        content: |
+          apiVersion: backstage.io/v1alpha1
+          kind: Component
+          metadata:
+            name: ${{ parameters.name }}
+            description: Auto-generated component
+            annotations:
+              backstage.io/managed-by-location: url:${{ '' | projectSlug }}
+          spec:
+            type: service
+            lifecycle: experimental
+            owner: ${{ parameters.secondaryOwner_entityRef }}
+            dependsOn:
+              - ${{ parameters.teamLead_entityRef }}
+
+---
+# Example 2: Multiple Entities and Arrays
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: multiple-entities-example
+  title: Multiple Entities Example
+  description: Working with multiple entity selections
+spec:
+  owner: platform-team
+  type: example
+
+  parameters:
+    - title: Team Setup
+      required:
+        - projectName
+        - owner
+        - reviewers
+      properties:
+        projectName:
+          title: Project Name
+          type: string
+
+        owner:
+          title: Project Owner
+          type: string
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: "👤 ${{ metadata.name }} (${{ spec.profile.email }})"
+            catalogFilter:
+              kind: User
+            exposeEntityData: true
+
+        # Auto-populated owner fields
+        owner_name:
+          type: string
+          ui:widget: hidden
+        owner_email:
+          type: string
+          ui:widget: hidden
+        owner_entityRef:
+          type: string
+          ui:widget: hidden
+
+        team:
+          title: Owning Team
+          type: string
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: "🏢 ${{ metadata.name }} (${{ spec.children.length || 0 }} members)"
+            catalogFilter:
+              kind: Group
+              "spec.type": "team"
+            exposeEntityData: true
+
+        # Auto-populated team fields
+        team_name:
+          type: string
+          ui:widget: hidden
+        team_entityRef:
+          type: string
+          ui:widget: hidden
+
+  steps:
+    - id: setup-project
+      name: Setup Project Structure
+      action: fs:write
+      input:
+        path: ./project-config.json
+        content: |
+          {
+            "project": {
+              "name": "${{ parameters.projectName }}",
+              "owner": {
+                "display": "${{ parameters.owner }}",
+                "name": "${{ parameters.owner_name }}",
+                "email": "${{ parameters.owner_email }}",
+                "entityRef": "${{ parameters.owner_entityRef }}"
+              },
+              "team": {
+                "display": "${{ parameters.team }}",
+                "name": "${{ parameters.team_name }}",
+                "entityRef": "${{ parameters.team_entityRef }}"
+              },
+              "createdAt": "${{ '' | now }}",
+              "createdBy": "${{ user.entity.metadata.name }}"
+            }
+          }
+
+    - id: notify-owner
+      name: Log Notification Details
+      action: debug:log
+      input:
+        message: |
+          📧 NOTIFICATION READY:
+
+          To: ${{ parameters.owner_email }}
+          Subject: New project "${{ parameters.projectName }}" created
+
+          Hi ${{ parameters.owner_name }},
+
+          Your new project "${{ parameters.projectName }}" has been created.
+
+          Team: ${{ parameters.team }}
+          Owner: ${{ parameters.owner }}
+
+          Project Details: 
+          - Entity Reference: ${{ parameters.owner_entityRef }}
+          - Team Reference: ${{ parameters.team_entityRef }}
+
+          Best regards,
+          Platform Team
+
+---
+# Example 3: Advanced Filtering and Conditional Logic
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: advanced-filtering-example
+  title: Advanced Filtering Example
+  description: Advanced entity filtering and conditional logic
+spec:
+  owner: platform-team
+  type: example
+
+  parameters:
+    - title: Service Configuration
+      required:
+        - serviceName
+        - techLead
+      properties:
+        serviceName:
+          title: Service Name
+          type: string
+
+        techLead:
+          title: Technical Lead
+          type: string
+          description: Select a senior developer as tech lead
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} [${{ spec.profile.level || 'Unknown' }}] - ${{ spec.profile.department }}"
+            catalogFilter:
+              kind: User
+              "spec.profile.level": "senior"
+              "spec.profile.canLeadProjects": true
+            exposeEntityData: true
+
+        techLead_name:
+          type: string
+          ui:widget: hidden
+        techLead_email:
+          type: string
+          ui:widget: hidden
+        techLead_department:
+          type: string
+          ui:widget: hidden
+        techLead_entityRef:
+          type: string
+          ui:widget: hidden
+
+        targetSystem:
+          title: Target System
+          type: string
+          description: System where this service will be deployed
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} [${{ spec.type }}] - ${{ spec.owner }}"
+            catalogFilter:
+              kind: System
+              "spec.lifecycle": "production"
+            exposeEntityData: true
+
+        targetSystem_name:
+          type: string
+          ui:widget: hidden
+        targetSystem_entityRef:
+          type: string
+          ui:widget: hidden
+
+  steps:
+    - id: validate-setup
+      name: Validate Configuration
+      action: debug:log
+      input:
+        message: |
+          ✅ VALIDATION RESULTS:
+
+          Service: ${{ parameters.serviceName }}
+          Tech Lead: ${{ parameters.techLead }}
+          - Name: ${{ parameters.techLead_name }}
+          - Email: ${{ parameters.techLead_email }}  
+          - Department: ${{ parameters.techLead_department }}
+
+          Target System: ${{ parameters.targetSystem }}
+          - System Name: ${{ parameters.targetSystem_name }}
+          - Entity Ref: ${{ parameters.targetSystem_entityRef }}
+
+          🎯 Ready to create service with full entity context!
+
+    - id: create-service-manifest
+      name: Create Service Manifest
+      action: fs:write
+      input:
+        path: ./service-manifest.yaml
+        content: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${{ parameters.serviceName }}
+            labels:
+              tech-lead: ${{ parameters.techLead_name }}
+              department: ${{ parameters.techLead_department }}
+              target-system: ${{ parameters.targetSystem_name }}
+            annotations:
+              backstage.io/tech-lead: ${{ parameters.techLead_entityRef }}
+              backstage.io/target-system: ${{ parameters.targetSystem_entityRef }}
+              created-by: ${{ user.entity.metadata.name }}
+          spec:
+            owner: ${{ parameters.techLead_entityRef }}
+            system: ${{ parameters.targetSystem_entityRef }}
+            lifecycle: development
