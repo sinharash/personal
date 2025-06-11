@@ -1,137 +1,82 @@
-# Entity Data Access Example
+# Test template to verify your enhanced entity picker actions work
 
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: entity-data-access-example
-  title: Entity Data Access Example
-  description: Shows how to access full entity data from EnhancedEntityPicker
+  name: test-enhanced-entity-picker
+  title: Test Enhanced Entity Picker
+  description: Test the enhanced entity picker with custom actions
 spec:
   owner: platform-team
-  type: example
+  type: test
 
   parameters:
-    - title: Basic Setup
+    - title: Test Entity Selection
       required:
-        - projectName
-        - owner
+        - testEntity
       properties:
-        projectName:
-          title: Project Name
+        testEntity:
+          title: Select Any Entity
           type: string
-          description: Name of your project
-
-        owner:
-          title: Project Owner
-          type: string
-          description: Choose the project owner
+          description: Choose any entity to test with
           ui:field: EnhancedEntityPicker
           ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.name }} (${{ spec.profile.email }})"
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} [${{ kind }}]"
             catalogFilter:
-              kind: User
+              kind: User # Change this to test different entity types
 
   steps:
-    - id: show-available-data
-      name: Show Available Data
+    - id: show-display-value
+      name: Show Display Value
       action: debug:log
       input:
         message: |
-          📋 AVAILABLE DATA:
+          📋 CLEAN DISPLAY VALUE:
+          Selected Entity: ${{ parameters.testEntity }}
 
-          Clean Display Format: ${{ parameters.owner }}
-          Entity Reference: ${{ parameters.ownerEntityRef }}
-
-    - id: fetch-full-entity-data
-      name: Fetch Full Entity Data
-      action: catalog:fetch
+    - id: resolve-entity
+      name: Resolve Entity Data
+      action: enhanced:resolveEntity
       input:
-        entityRef: ${{ parameters.ownerEntityRef }}
+        displayValue: ${{ parameters.testEntity }}
+        displayTemplate: "${{ metadata.name }} [${{ kind }}]"
+        catalogFilter:
+          kind: User
 
-    - id: show-full-entity-data
-      name: Show Full Entity Data
+    - id: debug-entity-properties
+      name: Debug Entity Properties
+      action: enhanced:debugEntity
+      input:
+        entity: ${{ steps['resolve-entity'].output.entity }}
+
+    - id: show-resolved-data
+      name: Show Resolved Data
       action: debug:log
       input:
         message: |
-          🎯 FULL ENTITY DATA ACCESS:
+          🎯 RESOLVED ENTITY DATA:
 
-          Display Name: ${{ steps['fetch-full-entity-data'].output.entity.metadata.name }}
-          Email: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.email }}
-          Department: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.department || 'N/A' }}
-          Title: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.title || 'N/A' }}
-          Phone: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.phone || 'N/A' }}
-          Manager: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.manager || 'N/A' }}
-          Kind: ${{ steps['fetch-full-entity-data'].output.entity.kind }}
-          Namespace: ${{ steps['fetch-full-entity-data'].output.entity.metadata.namespace }}
-          UID: ${{ steps['fetch-full-entity-data'].output.entity.metadata.uid }}
+          EntityRef: ${{ steps['resolve-entity'].output.entityRef }}
+          Kind: ${{ steps['resolve-entity'].output.entity.kind }}
+          Name: ${{ steps['resolve-entity'].output.entity.metadata.name }}
+          Namespace: ${{ steps['resolve-entity'].output.entity.metadata.namespace || 'default' }}
 
-          # ANY property from the entity is accessible!
+          # Check debug logs above to see ALL available properties!
 
-    - id: create-detailed-readme
-      name: Create Detailed README
+    - id: create-test-file
+      name: Create Test File
       action: fs:write
       input:
-        path: ./README.md
-        content: |
-          # ${{ parameters.projectName }}
-
-          ## Project Owner
-          **Display**: ${{ parameters.owner }}
-          **Name**: ${{ steps['fetch-full-entity-data'].output.entity.metadata.name }}
-          **Email**: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.email }}
-          **Department**: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.department || 'Not specified' }}
-          **Title**: ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.title || 'Not specified' }}
-
-          ## Contact Information
-          For questions about this project, contact ${{ parameters.owner }} 
-          at ${{ steps['fetch-full-entity-data'].output.entity.spec.profile.email }}.
-
-          ## Backstage Integration
-          - **Entity Reference**: ${{ parameters.ownerEntityRef }}
-          - **Entity Kind**: ${{ steps['fetch-full-entity-data'].output.entity.kind }}
-          - **Entity Namespace**: ${{ steps['fetch-full-entity-data'].output.entity.metadata.namespace }}
-
-    - id: create-catalog-info
-      name: Create Catalog Info
-      action: fs:write
-      input:
-        path: ./catalog-info.yaml
-        content: |
-          apiVersion: backstage.io/v1alpha1
-          kind: Component
-          metadata:
-            name: ${{ parameters.projectName }}
-            title: ${{ parameters.projectName }}
-            description: "Project owned by ${{ parameters.owner }}"
-            annotations:
-              # Clean display format for annotations
-              project.owner.display: "${{ parameters.owner }}"
-              # Entity data for Backstage integration
-              project.owner.email: "${{ steps['fetch-full-entity-data'].output.entity.spec.profile.email }}"
-              project.owner.department: "${{ steps['fetch-full-entity-data'].output.entity.spec.profile.department || 'unknown' }}"
-          spec:
-            type: service
-            lifecycle: experimental
-            # Use entityRef for Backstage relationships
-            owner: ${{ parameters.ownerEntityRef }}
-
-    - id: create-notification
-      name: Create Notification Template
-      action: fs:write
-      input:
-        path: ./notification.json
+        path: ./test-results.json
         content: |
           {
-            "type": "project_created",
-            "project": {
-              "name": "${{ parameters.projectName }}",
-              "owner": {
-                "display": "${{ parameters.owner }}",
-                "name": "${{ steps['fetch-full-entity-data'].output.entity.metadata.name }}",
-                "email": "${{ steps['fetch-full-entity-data'].output.entity.spec.profile.email }}",
-                "department": "${{ steps['fetch-full-entity-data'].output.entity.spec.profile.department || null }}",
-                "entityRef": "${{ parameters.ownerEntityRef }}"
-              }
+            "test": "enhanced-entity-picker",
+            "displayValue": "${{ parameters.testEntity }}",
+            "resolvedEntity": {
+              "entityRef": "${{ steps['resolve-entity'].output.entityRef }}",
+              "kind": "${{ steps['resolve-entity'].output.entity.kind }}",
+              "name": "${{ steps['resolve-entity'].output.entity.metadata.name }}",
+              "namespace": "${{ steps['resolve-entity'].output.entity.metadata.namespace || 'default' }}"
             },
-            "message": "Hi ${{ steps['fetch-full-entity-data'].output.entity.metadata.name }}, your project '${{ parameters.projectName }}' has been created!"
+            "status": "success"
           }
