@@ -17,7 +17,7 @@ import templateString from "lodash/template";
  * Props for the EnhancedEntityPicker component
  */
 interface EnhancedEntityPickerProps extends FieldExtensionComponentProps<any> {
-  uiOptions: {
+  uiOptions?: {
     catalogFilter?: {
       kind?: string;
       [key: string]: any;
@@ -37,17 +37,17 @@ export const EnhancedEntityPicker = ({
   formData,
   disabled,
   readonly,
-  uiOptions,
+  uiOptions = {}, // Provide default empty object
 }: EnhancedEntityPickerProps) => {
   const catalogApi = useApi(catalogApiRef);
   const [inputValue, setInputValue] = useState("");
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [displayValue, setDisplayValue] = useState<string>("");
 
-  // Extract options from the UI schema
-  const catalogFilter = uiOptions.catalogFilter || {};
+  // Extract options from the UI schema with safe defaults
+  const catalogFilter = uiOptions?.catalogFilter || {};
   const displayFormat =
-    uiOptions.displayEntityFieldAfterFormatting || "${metadata.name}";
+    uiOptions?.displayEntityFieldAfterFormatting || "${metadata.name}";
 
   // Get entities from the catalog based on the filter
   const { value: entities, loading } = useAsync(async () => {
