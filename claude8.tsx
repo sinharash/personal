@@ -27,9 +27,8 @@ export interface EntityPickerProps {
   formData?: any;
 }
 
-// Simple format: displayValue:::entityRef
-// The triple colon separator is unlikely to appear in normal text
-const SEPARATOR = ":::";
+// Store entity references by display value
+const entityRefByDisplay = new Map<string, string>();
 
 export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
   const { onChange, schema, required, uiSchema, formData } = props;
@@ -70,28 +69,16 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
     });
   };
 
-  // Parse a combined value string into display and entityRef parts
-  const parseValue = (
-    value: string
-  ): { display: string; entityRef: string } => {
-    if (!value || !value.includes(SEPARATOR)) {
-      return { display: value, entityRef: value };
-    }
-
-    const [display, entityRef] = value.split(SEPARATOR);
-    return { display, entityRef };
-  };
-
   // Initialize component state from formData (for review stage)
   useEffect(() => {
-    if (formData) {
-      const { display, entityRef } = parseValue(formData);
+    if (formData && typeof formData === "string") {
+      // Set the display value
+      setSelectedDisplay(formData);
 
-      // Set the display value for the input field
-      setSelectedDisplay(display);
+      // Find the entity by stored reference (if available)
+      const entityRef = entityRefByDisplay.get(formData);
 
-      // If we have entities loaded, try to find the selected entity
-      if (entities.length > 0 && entityRef) {
+      if (entityRef && entities.length > 0) {
         const found = entities.find((e) => stringifyEntityRef(e) === entityRef);
         if (found) {
           setSelectedEntity(found);
@@ -149,17 +136,23 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
       // Get the entity reference string
       const entityRef = stringifyEntityRef(newValue);
 
-      // Create the combined value string: displayValue:::entityRef
-      const combinedValue = `${formattedValue}${SEPARATOR}${entityRef}`;
+      // Store the entity reference by display value
+      entityRefByDisplay.set(formattedValue, entityRef);
 
       // For debugging
       console.debug("Selected entity:", newValue);
       console.debug("Formatted display:", formattedValue);
       console.debug("Entity reference:", entityRef);
-      console.debug("Combined value:", combinedValue);
 
-      // Return the combined value
-      onChange(combinedValue);
+      // Set a data attribute with the entity reference on window (for debugging)
+      if (typeof window !== "undefined") {
+        (window as any).entityRefs = (window as any).entityRefs || {};
+        (window as any).entityRefs[formattedValue] = entityRef;
+      }
+
+      // IMPORTANT: Return ONLY the formatted display value
+      // This ensures the review stage shows only this value
+      onChange(formattedValue);
     } else {
       setSelectedDisplay("");
       onChange(undefined);
@@ -189,7 +182,7 @@ export const EnhancedEntityPicker: React.FC<EntityPickerProps> = (props) => {
       options={entities}
       getOptionLabel={(option: Entity | string) => {
         if (typeof option === "string") {
-          return parseValue(option).display;
+          return option;
         }
         return formatEntityDisplay(option);
       }}
