@@ -116,53 +116,44 @@ export const EnhancedEntityPicker = ({
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
 
-      // Store the clean display format as the main form value
+      // Store ONLY the clean display format as the main form value
       onChange(displayValue);
-
-      // Update additional form fields with entity data for template access
-      if (formContext && typeof formContext.formData === "object") {
-        // Create entity data fields that templates can access
-        formContext.formData[
-          `${fieldName}_entityRef`
-        ] = `${newValue.kind.toLowerCase()}:${
-          newValue.metadata.namespace || "default"
-        }/${newValue.metadata.name}`;
-        formContext.formData[`${fieldName}_name`] = newValue.metadata.name;
-        formContext.formData[`${fieldName}_kind`] = newValue.kind;
-        formContext.formData[`${fieldName}_namespace`] =
-          newValue.metadata.namespace || "default";
-        formContext.formData[`${fieldName}_email`] =
-          newValue.spec?.profile?.email || "";
-        formContext.formData[`${fieldName}_displayName`] =
-          newValue.spec?.profile?.displayName || newValue.metadata.name;
-        formContext.formData[`${fieldName}_department`] =
-          newValue.spec?.profile?.department || "";
-        formContext.formData[`${fieldName}_title`] =
-          newValue.spec?.profile?.title || "";
-        formContext.formData[`${fieldName}_uid`] = newValue.metadata.uid || "";
-      }
-
       setSelectedEntity(newValue);
+
+      // Store entity data in a way that's accessible to templates but hidden from review
+      // We'll use a custom approach that doesn't interfere with the form UI
+      if (typeof window !== "undefined") {
+        // Store in a global that templates can access via custom action if needed
+        window.backstageEnhancedEntityData =
+          window.backstageEnhancedEntityData || {};
+        window.backstageEnhancedEntityData[fieldName] = {
+          entityRef: `${newValue.kind.toLowerCase()}:${
+            newValue.metadata.namespace || "default"
+          }/${newValue.metadata.name}`,
+          name: newValue.metadata.name,
+          kind: newValue.kind,
+          namespace: newValue.metadata.namespace || "default",
+          email: newValue.spec?.profile?.email || "",
+          displayName:
+            newValue.spec?.profile?.displayName || newValue.metadata.name,
+          department: newValue.spec?.profile?.department || "",
+          title: newValue.spec?.profile?.title || "",
+          uid: newValue.metadata.uid || "",
+          fullEntity: newValue,
+        };
+      }
     } else {
       onChange("");
       setSelectedEntity(null);
 
-      // Clear entity data fields
-      if (formContext && typeof formContext.formData === "object") {
-        delete formContext.formData[`${fieldName}_entityRef`];
-        delete formContext.formData[`${fieldName}_name`];
-        delete formContext.formData[`${fieldName}_kind`];
-        delete formContext.formData[`${fieldName}_namespace`];
-        delete formContext.formData[`${fieldName}_email`];
-        delete formContext.formData[`${fieldName}_displayName`];
-        delete formContext.formData[`${fieldName}_department`];
-        delete formContext.formData[`${fieldName}_title`];
-        delete formContext.formData[`${fieldName}_uid`];
+      // Clear stored data
+      if (typeof window !== "undefined" && window.backstageEnhancedEntityData) {
+        delete window.backstageEnhancedEntityData[fieldName];
       }
     }
   };
 
-  // Create display options for autocomplete
+  // Create ONLY the display options (no duplicates)
   const displayOptions = entities.map((entity) => ({
     entity,
     displayText: formatEntityDisplay(displayTemplate, entity),
@@ -211,39 +202,34 @@ export const EnhancedEntityPicker = ({
         )}
       />
 
-      {/* Debug information - shows what's available in templates */}
+      {/* Debug information - shows what's stored */}
       {selectedEntity && process.env.NODE_ENV === "development" && (
         <Box sx={{ mt: 2, p: 2, bgcolor: "grey.100", borderRadius: 1 }}>
-          <strong>Debug - Available in YAML templates:</strong>
+          <strong>Debug Info:</strong>
           <pre style={{ fontSize: "12px", overflow: "auto", marginTop: "8px" }}>
-            {`# What user sees everywhere (dropdown, field, review):
+            {`✅ What user sees in field/review:
 parameters.${fieldName}: "${formatEntityDisplay(
               displayTemplate,
               selectedEntity
             )}"
 
-# Full entity data accessible in templates:
-parameters.${fieldName}_name: "${selectedEntity.metadata.name}"
-parameters.${fieldName}_email: "${selectedEntity.spec?.profile?.email || ""}"
-parameters.${fieldName}_entityRef: "${selectedEntity.kind.toLowerCase()}:${
+🔧 Entity data available (via custom action):
+- entityRef: ${selectedEntity.kind.toLowerCase()}:${
               selectedEntity.metadata.namespace || "default"
-            }/${selectedEntity.metadata.name}"
-parameters.${fieldName}_kind: "${selectedEntity.kind}"
-parameters.${fieldName}_namespace: "${
-              selectedEntity.metadata.namespace || "default"
-            }"
-parameters.${fieldName}_displayName: "${
-              selectedEntity.spec?.profile?.displayName ||
-              selectedEntity.metadata.name
-            }"
-parameters.${fieldName}_department: "${
-              selectedEntity.spec?.profile?.department || ""
-            }"
-parameters.${fieldName}_title: "${selectedEntity.spec?.profile?.title || ""}"
-parameters.${fieldName}_uid: "${selectedEntity.metadata.uid || ""}"`}
+            }/${selectedEntity.metadata.name}
+- name: ${selectedEntity.metadata.name}
+- email: ${selectedEntity.spec?.profile?.email || "N/A"}
+- department: ${selectedEntity.spec?.profile?.department || "N/A"}`}
           </pre>
         </Box>
       )}
     </Box>
   );
 };
+
+// Declare global type for TypeScript
+declare global {
+  interface Window {
+    backstageEnhancedEntityData?: { [key: string]: any };
+  }
+}
