@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Autocomplete, TextField, Box, Chip } from "@mui/material";
+import { Autocomplete, TextField, Box } from "@mui/material";
 import { useApi } from "@backstage/core-plugin-api";
 import { catalogApiRef } from "@backstage/plugin-catalog-react";
 import { Entity } from "@backstage/catalog-model";
@@ -18,7 +18,6 @@ interface EnhancedEntityPickerProps
       displayEntityFieldAfterFormatting?: string;
       catalogFilter?: CatalogFilter;
       placeholder?: string;
-      multiple?: boolean;
     }
   > {}
 
@@ -36,13 +35,6 @@ const formatEntityDisplay = (template: string, entity: Entity): string => {
   });
 };
 
-// Helper to create entity reference string
-const getEntityRef = (entity: Entity): string => {
-  return `${entity.kind.toLowerCase()}:${
-    entity.metadata.namespace || "default"
-  }/${entity.metadata.name}`;
-};
-
 export const EnhancedEntityPicker = ({
   formData,
   onChange,
@@ -50,6 +42,8 @@ export const EnhancedEntityPicker = ({
   uiSchema,
   rawErrors,
   disabled,
+  name,
+  formContext,
 }: EnhancedEntityPickerProps) => {
   const catalogApi = useApi(catalogApiRef);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -63,6 +57,10 @@ export const EnhancedEntityPicker = ({
   const catalogFilter = uiSchema?.["ui:options"]?.catalogFilter || {};
   const placeholder =
     uiSchema?.["ui:options"]?.placeholder || "Select an entity...";
+
+  // Get field name for creating additional entity data fields
+  const fieldName =
+    name || schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
 
   // Fetch entities from catalog
   const fetchEntities = useCallback(async () => {
@@ -101,35 +99,73 @@ export const EnhancedEntityPicker = ({
     fetchEntities();
   }, [fetchEntities]);
 
-  // Find the currently selected entity based on formData (entityRef)
+  // Find the currently selected entity based on formData (display format)
   useEffect(() => {
     if (formData && entities.length > 0) {
-      const found = entities.find(
-        (entity) => getEntityRef(entity) === formData
-      );
+      const found = entities.find((entity) => {
+        const displayValue = formatEntityDisplay(displayTemplate, entity);
+        return displayValue === formData;
+      });
       setSelectedEntity(found || null);
     } else {
       setSelectedEntity(null);
     }
-  }, [formData, entities]);
+  }, [formData, entities, displayTemplate]);
 
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
-      // Store the entityRef (like standard EntityPicker)
-      const entityRef = getEntityRef(newValue);
-      onChange(entityRef);
+      const displayValue = formatEntityDisplay(displayTemplate, newValue);
+
+      // Store the clean display format as the main form value
+      onChange(displayValue);
+
+      // Update additional form fields with entity data for template access
+      if (formContext && typeof formContext.formData === "object") {
+        // Create entity data fields that templates can access
+        formContext.formData[
+          `${fieldName}_entityRef`
+        ] = `${newValue.kind.toLowerCase()}:${
+          newValue.metadata.namespace || "default"
+        }/${newValue.metadata.name}`;
+        formContext.formData[`${fieldName}_name`] = newValue.metadata.name;
+        formContext.formData[`${fieldName}_kind`] = newValue.kind;
+        formContext.formData[`${fieldName}_namespace`] =
+          newValue.metadata.namespace || "default";
+        formContext.formData[`${fieldName}_email`] =
+          newValue.spec?.profile?.email || "";
+        formContext.formData[`${fieldName}_displayName`] =
+          newValue.spec?.profile?.displayName || newValue.metadata.name;
+        formContext.formData[`${fieldName}_department`] =
+          newValue.spec?.profile?.department || "";
+        formContext.formData[`${fieldName}_title`] =
+          newValue.spec?.profile?.title || "";
+        formContext.formData[`${fieldName}_uid`] = newValue.metadata.uid || "";
+      }
+
       setSelectedEntity(newValue);
     } else {
       onChange("");
       setSelectedEntity(null);
+
+      // Clear entity data fields
+      if (formContext && typeof formContext.formData === "object") {
+        delete formContext.formData[`${fieldName}_entityRef`];
+        delete formContext.formData[`${fieldName}_name`];
+        delete formContext.formData[`${fieldName}_kind`];
+        delete formContext.formData[`${fieldName}_namespace`];
+        delete formContext.formData[`${fieldName}_email`];
+        delete formContext.formData[`${fieldName}_displayName`];
+        delete formContext.formData[`${fieldName}_department`];
+        delete formContext.formData[`${fieldName}_title`];
+        delete formContext.formData[`${fieldName}_uid`];
+      }
     }
   };
 
-  // Create display options
+  // Create display options for autocomplete
   const displayOptions = entities.map((entity) => ({
     entity,
     displayText: formatEntityDisplay(displayTemplate, entity),
-    entityRef: getEntityRef(entity),
   }));
 
   // Find current selection for display
@@ -149,7 +185,7 @@ export const EnhancedEntityPicker = ({
         loading={loading}
         disabled={disabled}
         isOptionEqualToValue={(option, value) =>
-          option.entityRef === value.entityRef
+          option.entity.metadata.uid === value.entity.metadata.uid
         }
         renderInput={(params) => (
           <TextField
@@ -167,43 +203,44 @@ export const EnhancedEntityPicker = ({
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
               <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
-                {option.entity.metadata.description || option.entityRef}
+                {option.entity.metadata.description ||
+                  `${option.entity.kind}:${option.entity.metadata.namespace}/${option.entity.metadata.name}`}
               </Box>
             </Box>
           </Box>
         )}
-        renderTags={(value, getTagProps) =>
-          value.map((option, index) => (
-            <Chip
-              variant="outlined"
-              label={option.displayText}
-              {...getTagProps({ index })}
-              key={option.entityRef}
-            />
-          ))
-        }
       />
 
-      {/* Debug information - shows what gets stored vs displayed */}
+      {/* Debug information - shows what's available in templates */}
       {selectedEntity && process.env.NODE_ENV === "development" && (
         <Box sx={{ mt: 2, p: 2, bgcolor: "grey.100", borderRadius: 1 }}>
-          <strong>Debug Info:</strong>
+          <strong>Debug - Available in YAML templates:</strong>
           <pre style={{ fontSize: "12px", overflow: "auto", marginTop: "8px" }}>
-            {`Stored in form: ${getEntityRef(selectedEntity)}
-Displayed to user: ${formatEntityDisplay(displayTemplate, selectedEntity)}
-
-Available in YAML steps:
-parameters.${schema.title?.toLowerCase().replace(/\s+/g, "")} = "${getEntityRef(
+            {`# What user sees everywhere (dropdown, field, review):
+parameters.${fieldName}: "${formatEntityDisplay(
+              displayTemplate,
               selectedEntity
             )}"
 
-With template functions (if implemented):
-$\{{ entities[parameters.${schema.title
-              ?.toLowerCase()
-              .replace(/\s+/g, "")}].metadata.name }}
-$\{{ entities[parameters.${schema.title
-              ?.toLowerCase()
-              .replace(/\s+/g, "")}].spec.profile.email }}`}
+# Full entity data accessible in templates:
+parameters.${fieldName}_name: "${selectedEntity.metadata.name}"
+parameters.${fieldName}_email: "${selectedEntity.spec?.profile?.email || ""}"
+parameters.${fieldName}_entityRef: "${selectedEntity.kind.toLowerCase()}:${
+              selectedEntity.metadata.namespace || "default"
+            }/${selectedEntity.metadata.name}"
+parameters.${fieldName}_kind: "${selectedEntity.kind}"
+parameters.${fieldName}_namespace: "${
+              selectedEntity.metadata.namespace || "default"
+            }"
+parameters.${fieldName}_displayName: "${
+              selectedEntity.spec?.profile?.displayName ||
+              selectedEntity.metadata.name
+            }"
+parameters.${fieldName}_department: "${
+              selectedEntity.spec?.profile?.department || ""
+            }"
+parameters.${fieldName}_title: "${selectedEntity.spec?.profile?.title || ""}"
+parameters.${fieldName}_uid: "${selectedEntity.metadata.uid || ""}"`}
           </pre>
         </Box>
       )}

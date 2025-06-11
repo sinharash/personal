@@ -32,40 +32,18 @@ spec:
               kind: User
 
   steps:
-    - id: show-what-we-got
-      name: Show What We Got
+    - id: show-clean-values
+      name: Show Clean Values
       action: debug:log
       input:
         message: |
-          📋 SIMPLE TEST RESULTS:
-
+          ✅ WHAT USER SEES (Clean Format):
           Project Name: ${{ parameters.projectName }}
-          Owner (what form stores): ${{ parameters.owner }}
+          Owner: ${{ parameters.owner }}
 
-    - id: resolve-owner-data
-      name: Resolve Owner Data
-      action: catalog:fetch
-      input:
-        entityRef: ${{ parameters.owner }}
-
-    - id: show-resolved-data
-      name: Show Resolved Data
-      action: debug:log
-      input:
-        message: |
-          🎯 RESOLVED ENTITY DATA:
-
-          Owner Name: ${{ steps['resolve-owner-data'].output.entity.metadata.name }}
-          Owner Email: ${{ steps['resolve-owner-data'].output.entity.spec.profile.email }}
-          Owner Department: ${{ steps['resolve-owner-data'].output.entity.spec.profile.department || 'Unknown' }}
-
-    - id: create-simple-file
-      name: Create Simple File
-      action: fs:write
-      input:
-        path: ./project-info.txt
-        content: |
-          Project: ${{ parameters.projectName }}
-          Owner: ${{ steps['resolve-owner-data'].output.entity.metadata.name }}
-          Email: ${{ steps['resolve-owner-data'].output.entity.spec.profile.email }}
-          Entity Reference: ${{ parameters.owner }}
+          🎯 FULL ENTITY DATA (Developer Access):
+          Owner Name: ${{ parameters.owner_name }}
+          Owner Email: ${{ parameters.owner_email }}
+          Owner Department: ${{ parameters.owner_department }}
+          Owner Entity Ref: ${{ parameters.owner_entityRef }}
+          Owner Display Name: ${{ parameters.owner_displayName }}
