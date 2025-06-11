@@ -109,28 +109,43 @@ export const EnhancedEntityPicker = ({
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
+      const entityRef = `${newValue.kind.toLowerCase()}:${
+        newValue.metadata.namespace || "default"
+      }/${newValue.metadata.name}`;
 
-      // Store ONLY the clean display format
+      // Store ONLY the clean display format as the main value
       // This is what user sees in field, review page, etc.
       onChange(displayValue);
       setSelectedEntity(newValue);
 
-      // Store entityRef globally for template access if needed
-      // This won't show up in the form/review
+      // Store entityRef in a separate hidden field for template access
+      // This won't show up in review but will be accessible in YAML
+      const fieldName =
+        schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
+
+      // Use formContext to store entityRef in a hidden field
+      if (formContext && formContext.formData) {
+        formContext.formData[`${fieldName}EntityRef`] = entityRef;
+      }
+
+      // Also store in window for debugging
       if (typeof window !== "undefined") {
         window.enhancedEntityPickerData = window.enhancedEntityPickerData || {};
-        const fieldName =
-          schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
         window.enhancedEntityPickerData[fieldName] = {
-          entityRef: `${newValue.kind.toLowerCase()}:${
-            newValue.metadata.namespace || "default"
-          }/${newValue.metadata.name}`,
+          entityRef,
           entity: newValue,
         };
       }
     } else {
       onChange("");
       setSelectedEntity(null);
+
+      // Clear stored data
+      const fieldName =
+        schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
+      if (formContext && formContext.formData) {
+        delete formContext.formData[`${fieldName}EntityRef`];
+      }
     }
   };
 
@@ -236,6 +251,28 @@ export const EnhancedEntityPicker = ({
                 EntityRef: {selectedEntity.kind.toLowerCase()}:
                 {selectedEntity.metadata.namespace || "default"}/
                 {selectedEntity.metadata.name}
+              </div>
+
+              <strong style={{ marginTop: "8px", display: "block" }}>
+                Available in YAML:
+              </strong>
+              <div
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: "10px",
+                  background: "#f0f0f0",
+                  padding: "4px",
+                  marginTop: "4px",
+                }}
+              >
+                {`parameters.${
+                  schema.title?.toLowerCase().replace(/\s+/g, "") || "entity"
+                }: "${formatEntityDisplay(displayTemplate, selectedEntity)}"
+parameters.${
+                  schema.title?.toLowerCase().replace(/\s+/g, "") || "entity"
+                }EntityRef: "${selectedEntity.kind.toLowerCase()}:${
+                  selectedEntity.metadata.namespace || "default"
+                }/${selectedEntity.metadata.name}"`}
               </div>
             </>
           )}
