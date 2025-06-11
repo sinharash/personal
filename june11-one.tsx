@@ -42,8 +42,6 @@ export const EnhancedEntityPicker = ({
   uiSchema,
   rawErrors,
   disabled,
-  name,
-  formContext,
 }: EnhancedEntityPickerProps) => {
   const catalogApi = useApi(catalogApiRef);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -57,10 +55,6 @@ export const EnhancedEntityPicker = ({
   const catalogFilter = uiSchema?.["ui:options"]?.catalogFilter || {};
   const placeholder =
     uiSchema?.["ui:options"]?.placeholder || "Select an entity...";
-
-  // Get field name for creating additional entity data fields
-  const fieldName =
-    name || schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
 
   // Fetch entities from catalog
   const fetchEntities = useCallback(async () => {
@@ -99,7 +93,7 @@ export const EnhancedEntityPicker = ({
     fetchEntities();
   }, [fetchEntities]);
 
-  // Find the currently selected entity based on formData (display format)
+  // Find the currently selected entity based on formData (clean display format)
   useEffect(() => {
     if (formData && entities.length > 0) {
       const found = entities.find((entity) => {
@@ -116,52 +110,52 @@ export const EnhancedEntityPicker = ({
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
 
-      // Store ONLY the clean display format as the main form value
+      // Store ONLY the clean display format
+      // This is what user sees in field, review page, etc.
       onChange(displayValue);
       setSelectedEntity(newValue);
 
-      // Store entity data in a way that's accessible to templates but hidden from review
-      // We'll use a custom approach that doesn't interfere with the form UI
+      // Store entityRef globally for template access if needed
+      // This won't show up in the form/review
       if (typeof window !== "undefined") {
-        // Store in a global that templates can access via custom action if needed
-        window.backstageEnhancedEntityData =
-          window.backstageEnhancedEntityData || {};
-        window.backstageEnhancedEntityData[fieldName] = {
+        window.enhancedEntityPickerData = window.enhancedEntityPickerData || {};
+        const fieldName =
+          schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
+        window.enhancedEntityPickerData[fieldName] = {
           entityRef: `${newValue.kind.toLowerCase()}:${
             newValue.metadata.namespace || "default"
           }/${newValue.metadata.name}`,
-          name: newValue.metadata.name,
-          kind: newValue.kind,
-          namespace: newValue.metadata.namespace || "default",
-          email: newValue.spec?.profile?.email || "",
-          displayName:
-            newValue.spec?.profile?.displayName || newValue.metadata.name,
-          department: newValue.spec?.profile?.department || "",
-          title: newValue.spec?.profile?.title || "",
-          uid: newValue.metadata.uid || "",
-          fullEntity: newValue,
+          entity: newValue,
         };
       }
     } else {
       onChange("");
       setSelectedEntity(null);
-
-      // Clear stored data
-      if (typeof window !== "undefined" && window.backstageEnhancedEntityData) {
-        delete window.backstageEnhancedEntityData[fieldName];
-      }
     }
   };
 
-  // Create ONLY the display options (no duplicates)
-  const displayOptions = entities.map((entity) => ({
-    entity,
-    displayText: formatEntityDisplay(displayTemplate, entity),
-  }));
+  // Create display options - ONLY clean formatted options with deduplication
+  const displayOptions = entities
+    .map((entity) => ({
+      entity,
+      displayText: formatEntityDisplay(displayTemplate, entity),
+      entityId:
+        entity.metadata.uid ||
+        `${entity.kind}:${entity.metadata.namespace}/${entity.metadata.name}`,
+    }))
+    // Remove duplicates by entityId
+    .filter(
+      (option, index, array) =>
+        array.findIndex((item) => item.entityId === option.entityId) === index
+    )
+    // Remove empty display texts
+    .filter((option) => option.displayText && option.displayText.trim() !== "");
 
-  // Find current selection for display
+  // Find current selection
   const currentSelection = selectedEntity
-    ? displayOptions.find((opt) => opt.entity === selectedEntity) || null
+    ? displayOptions.find(
+        (opt) => opt.entity.metadata.uid === selectedEntity.metadata.uid
+      ) || null
     : null;
 
   return (
@@ -176,7 +170,7 @@ export const EnhancedEntityPicker = ({
         loading={loading}
         disabled={disabled}
         isOptionEqualToValue={(option, value) =>
-          option.entity.metadata.uid === value.entity.metadata.uid
+          option.entityId === value.entityId
         }
         renderInput={(params) => (
           <TextField
@@ -202,34 +196,56 @@ export const EnhancedEntityPicker = ({
         )}
       />
 
-      {/* Debug information - shows what's stored */}
-      {selectedEntity && process.env.NODE_ENV === "development" && (
-        <Box sx={{ mt: 2, p: 2, bgcolor: "grey.100", borderRadius: 1 }}>
-          <strong>Debug Info:</strong>
-          <pre style={{ fontSize: "12px", overflow: "auto", marginTop: "8px" }}>
-            {`✅ What user sees in field/review:
-parameters.${fieldName}: "${formatEntityDisplay(
-              displayTemplate,
-              selectedEntity
-            )}"
+      {/* Debug information */}
+      {process.env.NODE_ENV === "development" && (
+        <Box
+          sx={{
+            mt: 1,
+            p: 1,
+            bgcolor: "grey.50",
+            borderRadius: 1,
+            fontSize: "11px",
+          }}
+        >
+          <strong>Debug - Dropdown Options ({displayOptions.length}):</strong>
+          <div
+            style={{ maxHeight: "100px", overflow: "auto", marginTop: "4px" }}
+          >
+            {displayOptions.slice(0, 5).map((opt, idx) => (
+              <div key={idx}>
+                {idx + 1}. "{opt.displayText}"
+              </div>
+            ))}
+            {displayOptions.length > 5 && (
+              <div>... and {displayOptions.length - 5} more</div>
+            )}
+          </div>
 
-🔧 Entity data available (via custom action):
-- entityRef: ${selectedEntity.kind.toLowerCase()}:${
-              selectedEntity.metadata.namespace || "default"
-            }/${selectedEntity.metadata.name}
-- name: ${selectedEntity.metadata.name}
-- email: ${selectedEntity.spec?.profile?.email || "N/A"}
-- department: ${selectedEntity.spec?.profile?.department || "N/A"}`}
-          </pre>
+          {selectedEntity && (
+            <>
+              <strong style={{ marginTop: "8px", display: "block" }}>
+                Selected:
+              </strong>
+              <div>
+                Display: "{formatEntityDisplay(displayTemplate, selectedEntity)}
+                "
+              </div>
+              <div>
+                EntityRef: {selectedEntity.kind.toLowerCase()}:
+                {selectedEntity.metadata.namespace || "default"}/
+                {selectedEntity.metadata.name}
+              </div>
+            </>
+          )}
         </Box>
       )}
     </Box>
   );
 };
 
-// Declare global type for TypeScript
+// Global type declaration
 declare global {
   interface Window {
-    backstageEnhancedEntityData?: { [key: string]: any };
+    enhancedEntityPickerData?: { [key: string]: any };
   }
 }
