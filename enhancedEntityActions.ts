@@ -207,3 +207,77 @@ export const debugEntityPropertiesAction = () => {
     },
   });
 };
+
+// I need to replace the above handler function for client
+
+// In your enhancedEntityActions.ts - replace the handler with this:
+
+async handler(ctx) {
+    const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
+  
+    try {
+      // Use the simplest approach - backend-to-backend call without auth
+      const catalogUrl = await discovery.getBaseUrl('catalog');
+      const entitiesUrl = `${catalogUrl}/entities`;
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      Object.entries(catalogFilter).forEach(([key, value]) => {
+        if (value !== undefined) {
+          params.append(`filter[${key}]`, String(value));
+        }
+      });
+      
+      const response = await fetch(`${entitiesUrl}?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const entitiesData = await response.json();
+      const entities = entitiesData.items || entitiesData;
+  
+      ctx.logger.info(`Found ${entities.length} entities`);
+  
+      // Generic function to format entity display
+      const formatEntityDisplay = (template: string, entity: any): string => {
+        return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+          const trimmedPath = path.trim();
+          const value = trimmedPath.split('.').reduce((obj: any, key: string) => {
+            return obj && obj[key] !== undefined ? obj[key] : '';
+          }, entity);
+          return value || '';
+        });
+      };
+  
+      // Find matching entity
+      const matchingEntity = entities.find((entity: any) => {
+        const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
+        return formattedDisplay === displayValue;
+      });
+  
+      if (!matchingEntity) {
+        ctx.logger.error(`Could not find entity matching: "${displayValue}"`);
+        ctx.logger.info('Available entities:');
+        entities.slice(0, 5).forEach((entity: any) => {
+          const formatted = formatEntityDisplay(displayTemplate, entity);
+          ctx.logger.info(`  - "${formatted}"`);
+        });
+        throw new Error(`Entity not found: "${displayValue}"`);
+      }
+  
+      const entityRef = `${matchingEntity.kind.toLowerCase()}:${matchingEntity.metadata.namespace || 'default'}/${matchingEntity.metadata.name}`;
+  
+      ctx.logger.info(`✅ Resolved: ${entityRef}`);
+  
+      // Output the results
+      ctx.output('entity', matchingEntity);
+      ctx.output('entityRef', entityRef);
+      ctx.output('metadata', matchingEntity.metadata);
+      ctx.output('spec', matchingEntity.spec || {});
+  
+    } catch (error) {
+      ctx.logger.error(`Failed to resolve entity: ${error}`);
+      throw error;
+    }
+  }
