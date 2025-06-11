@@ -19,7 +19,6 @@ interface EnhancedEntityPickerProps
       catalogFilter?: CatalogFilter;
       placeholder?: string;
       multiple?: boolean;
-      exposeEntityData?: boolean;
     }
   > {}
 
@@ -37,12 +36,12 @@ const formatEntityDisplay = (template: string, entity: Entity): string => {
   });
 };
 
-// Global storage for entity data that can be accessed across the app
-declare global {
-  interface Window {
-    backstageEntityData?: { [key: string]: Entity };
-  }
-}
+// Helper to create entity reference string
+const getEntityRef = (entity: Entity): string => {
+  return `${entity.kind.toLowerCase()}:${
+    entity.metadata.namespace || "default"
+  }/${entity.metadata.name}`;
+};
 
 export const EnhancedEntityPicker = ({
   formData,
@@ -51,8 +50,6 @@ export const EnhancedEntityPicker = ({
   uiSchema,
   rawErrors,
   disabled,
-  name,
-  formContext,
 }: EnhancedEntityPickerProps) => {
   const catalogApi = useApi(catalogApiRef);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -66,18 +63,6 @@ export const EnhancedEntityPicker = ({
   const catalogFilter = uiSchema?.["ui:options"]?.catalogFilter || {};
   const placeholder =
     uiSchema?.["ui:options"]?.placeholder || "Select an entity...";
-  const exposeEntityData = uiSchema?.["ui:options"]?.exposeEntityData !== false; // Default to true
-
-  // Get field name for data storage
-  const fieldName =
-    name || schema.title?.replace(/\s+/g, "").toLowerCase() || "entity";
-
-  // Initialize global entity data storage
-  useEffect(() => {
-    if (typeof window !== "undefined" && !window.backstageEntityData) {
-      window.backstageEntityData = {};
-    }
-  }, []);
 
   // Fetch entities from catalog
   const fetchEntities = useCallback(async () => {
@@ -116,79 +101,55 @@ export const EnhancedEntityPicker = ({
     fetchEntities();
   }, [fetchEntities]);
 
-  // Find the currently selected entity based on formData
+  // Find the currently selected entity based on formData (entityRef)
   useEffect(() => {
     if (formData && entities.length > 0) {
-      const found = entities.find((entity) => {
-        const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
-        return formattedDisplay === formData;
-      });
+      const found = entities.find(
+        (entity) => getEntityRef(entity) === formData
+      );
       setSelectedEntity(found || null);
+    } else {
+      setSelectedEntity(null);
     }
-  }, [formData, entities, displayTemplate]);
+  }, [formData, entities]);
 
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
-      const formattedDisplay = formatEntityDisplay(displayTemplate, newValue);
-
-      // Store the formatted display value as the main form data
-      onChange(formattedDisplay);
-
-      // Store full entity data globally for template access
-      if (exposeEntityData && typeof window !== "undefined") {
-        window.backstageEntityData = window.backstageEntityData || {};
-        window.backstageEntityData[fieldName] = newValue;
-
-        // Also store in sessionStorage as backup
-        try {
-          sessionStorage.setItem(
-            `entityData_${fieldName}`,
-            JSON.stringify(newValue)
-          );
-        } catch (e) {
-          // Ignore storage errors
-        }
-      }
-
+      // Store the entityRef (like standard EntityPicker)
+      const entityRef = getEntityRef(newValue);
+      onChange(entityRef);
       setSelectedEntity(newValue);
     } else {
       onChange("");
       setSelectedEntity(null);
-
-      // Clear stored data
-      if (typeof window !== "undefined" && window.backstageEntityData) {
-        delete window.backstageEntityData[fieldName];
-      }
-      try {
-        sessionStorage.removeItem(`entityData_${fieldName}`);
-      } catch (e) {
-        // Ignore storage errors
-      }
     }
   };
 
-  // Format entities for display in autocomplete
-  const formattedEntities = entities.map((entity) => ({
+  // Create display options
+  const displayOptions = entities.map((entity) => ({
     entity,
     displayText: formatEntityDisplay(displayTemplate, entity),
+    entityRef: getEntityRef(entity),
   }));
+
+  // Find current selection for display
+  const currentSelection = selectedEntity
+    ? displayOptions.find((opt) => opt.entity === selectedEntity) || null
+    : null;
 
   return (
     <Box>
       <Autocomplete
-        options={formattedEntities}
+        options={displayOptions}
         getOptionLabel={(option) => option.displayText}
-        value={
-          formattedEntities.find((item) => item.entity === selectedEntity) ||
-          null
-        }
+        value={currentSelection}
         onChange={(event, newValue) =>
           handleChange(event, newValue?.entity || null)
         }
         loading={loading}
         disabled={disabled}
         isOptionEqualToValue={(option, value) =>
-          option.entity.metadata.uid === value.entity.metadata.uid
+          option.entityRef === value.entityRef
         }
         renderInput={(params) => (
           <TextField
@@ -206,8 +167,7 @@ export const EnhancedEntityPicker = ({
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
               <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
-                {option.entity.metadata.description ||
-                  `${option.entity.kind}:${option.entity.metadata.namespace}/${option.entity.metadata.name}`}
+                {option.entity.metadata.description || option.entityRef}
               </Box>
             </Box>
           </Box>
@@ -218,101 +178,32 @@ export const EnhancedEntityPicker = ({
               variant="outlined"
               label={option.displayText}
               {...getTagProps({ index })}
-              key={option.entity.metadata.uid}
+              key={option.entityRef}
             />
           ))
         }
       />
 
-      {/* Hidden fields to expose entity data for YAML access */}
-      {selectedEntity && exposeEntityData && (
-        <>
-          <input
-            type="hidden"
-            name={`${fieldName}_entityRef`}
-            value={`${selectedEntity.kind.toLowerCase()}:${
-              selectedEntity.metadata.namespace || "default"
-            }/${selectedEntity.metadata.name}`}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_name`}
-            value={selectedEntity.metadata.name}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_kind`}
-            value={selectedEntity.kind}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_namespace`}
-            value={selectedEntity.metadata.namespace || "default"}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_email`}
-            value={selectedEntity.spec?.profile?.email || ""}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_displayName`}
-            value={
-              selectedEntity.spec?.profile?.displayName ||
-              selectedEntity.metadata.name
-            }
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_department`}
-            value={selectedEntity.spec?.profile?.department || ""}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_title`}
-            value={selectedEntity.spec?.profile?.title || ""}
-          />
-          <input
-            type="hidden"
-            name={`${fieldName}_uid`}
-            value={selectedEntity.metadata.uid || ""}
-          />
-        </>
-      )}
-
-      {/* Debug information - remove in production */}
+      {/* Debug information - shows what gets stored vs displayed */}
       {selectedEntity && process.env.NODE_ENV === "development" && (
         <Box sx={{ mt: 2, p: 2, bgcolor: "grey.100", borderRadius: 1 }}>
-          <strong>Debug - Available in YAML as:</strong>
-          <pre style={{ fontSize: "12px", overflow: "auto" }}>
-            {`parameters.${fieldName}                    = "${formatEntityDisplay(
-              displayTemplate,
+          <strong>Debug Info:</strong>
+          <pre style={{ fontSize: "12px", overflow: "auto", marginTop: "8px" }}>
+            {`Stored in form: ${getEntityRef(selectedEntity)}
+Displayed to user: ${formatEntityDisplay(displayTemplate, selectedEntity)}
+
+Available in YAML steps:
+parameters.${schema.title?.toLowerCase().replace(/\s+/g, "")} = "${getEntityRef(
               selectedEntity
             )}"
-parameters.${fieldName}_name               = "${selectedEntity.metadata.name}"  
-parameters.${fieldName}_email              = "${
-              selectedEntity.spec?.profile?.email || ""
-            }"
-parameters.${fieldName}_entityRef          = "${selectedEntity.kind.toLowerCase()}:${
-              selectedEntity.metadata.namespace || "default"
-            }/${selectedEntity.metadata.name}"
-parameters.${fieldName}_kind               = "${selectedEntity.kind}"
-parameters.${fieldName}_namespace          = "${
-              selectedEntity.metadata.namespace || "default"
-            }"
-parameters.${fieldName}_displayName        = "${
-              selectedEntity.spec?.profile?.displayName ||
-              selectedEntity.metadata.name
-            }"
-parameters.${fieldName}_department         = "${
-              selectedEntity.spec?.profile?.department || ""
-            }"
-parameters.${fieldName}_title              = "${
-              selectedEntity.spec?.profile?.title || ""
-            }"
-parameters.${fieldName}_uid                = "${
-              selectedEntity.metadata.uid || ""
-            }"`}
+
+With template functions (if implemented):
+$\{{ entities[parameters.${schema.title
+              ?.toLowerCase()
+              .replace(/\s+/g, "")}].metadata.name }}
+$\{{ entities[parameters.${schema.title
+              ?.toLowerCase()
+              .replace(/\s+/g, "")}].spec.profile.email }}`}
           </pre>
         </Box>
       )}
