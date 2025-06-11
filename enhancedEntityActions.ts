@@ -1,8 +1,8 @@
 // packages/backend/src/plugins/scaffolder/actions/enhancedEntityActions.ts
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
-import { CatalogApi } from "@backstage/catalog-client";
-import { DiscoveryService, LoggerService } from "@backstage/backend-plugin-api";
+import { CatalogClient } from "@backstage/catalog-client";
+import { DiscoveryService } from "@backstage/backend-plugin-api";
 
 // Generic action to resolve ANY entity from display format
 export const resolveEntityFromDisplayAction = (options: {
@@ -70,8 +70,8 @@ export const resolveEntityFromDisplayAction = (options: {
     async handler(ctx) {
       const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
 
-      // Create catalog API client
-      const catalogApi = new CatalogApi({
+      // Create catalog API client - CORRECTED
+      const catalogApi = new CatalogClient({
         discoveryApi: discovery,
         fetchApi: { fetch },
       });
@@ -130,12 +130,11 @@ export const resolveEntityFromDisplayAction = (options: {
         `📋 Entity type: ${matchingEntity.kind}, Available properties: metadata, spec, apiVersion, kind`
       );
 
-      return {
-        entity: matchingEntity, // Complete entity object - access ANY property
-        entityRef: entityRef, // Entity reference for Backstage relationships
-        metadata: matchingEntity.metadata, // Quick access to metadata
-        spec: matchingEntity.spec || {}, // Quick access to spec (if exists)
-      };
+      // CORRECTED - Use ctx.output() instead of return
+      ctx.output("entity", matchingEntity); // Complete entity object - access ANY property
+      ctx.output("entityRef", entityRef); // Entity reference for Backstage relationships
+      ctx.output("metadata", matchingEntity.metadata); // Quick access to metadata
+      ctx.output("spec", matchingEntity.spec || {}); // Quick access to spec (if exists)
     },
   });
 };
