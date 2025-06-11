@@ -1,0 +1,63 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: example-template
+  title: Example Template with Enhanced Entity Picker
+  description: Demonstrates the EnhancedEntityPicker
+spec:
+  owner: user:default/example-owner
+  type: service
+  parameters:
+    - title: Basic Information
+      required:
+        - name
+        - secondaryOwner
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Name of the component
+        secondaryOwner:
+          title: Secondary Owner
+          type: string
+          description: you will be primary owner, please choose a secondary owner
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            displayEntityFieldAfterFormatting: ${{ metadata.name }} (${{  spec.profile.email }} )
+            catalogFilter:
+              kind: User
+
+  steps:
+    # First, fetch the complete entity data
+    - id: fetch-secondary-owner
+      name: Fetch Secondary Owner
+      action: catalog:fetch-entity
+      input:
+        entityRef: ${{ parameters.secondaryOwner }}
+
+    # Now you can use any property from the entity in subsequent steps
+    - id: log-secondary-owner
+      name: Log Secondary Owner Details
+      action: debug:log
+      input:
+        message: "Selected secondary owner: ${{ parameters.secondaryOwner }}"
+        owner_data: |
+          Name: ${{ steps['fetch-secondary-owner'].output.name }}
+          Email: ${{ steps['fetch-secondary-owner'].output.email }}
+          Job Title: ${{ steps['fetch-secondary-owner'].output.spec.profile.jobTitle || 'N/A' }}
+          Department: ${{ steps['fetch-secondary-owner'].output.spec.profile.department || 'N/A' }}
+
+    # Example of creating a metadata file with owner information
+    - id: generate-owners-file
+      name: Generate CODEOWNERS file
+      action: fs:write
+      input:
+        path: .github/CODEOWNERS
+        content: |
+          # This file is generated - do not edit manually
+
+          # Default owner
+          * ${{ steps['fetch-secondary-owner'].output.email }}
+
+          # Documentation ownership
+          /docs/ ${{ steps['fetch-secondary-owner'].output.email }}
