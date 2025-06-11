@@ -187,10 +187,12 @@ export const EnhancedEntityPicker = ({
           <Box component="li" {...props}>
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
-              <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
-                {option.entity.metadata.description ||
-                  `${option.entity.kind}:${option.entity.metadata.namespace}/${option.entity.metadata.name}`}
-              </Box>
+              {/* Only show description if it exists, DON'T show entityRef */}
+              {option.entity.metadata.description && (
+                <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
+                  {option.entity.metadata.description}
+                </Box>
+              )}
             </Box>
           </Box>
         )}
