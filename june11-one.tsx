@@ -109,47 +109,36 @@ export const EnhancedEntityPicker = ({
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
-      const entityRef = `${newValue.kind.toLowerCase()}:${
-        newValue.metadata.namespace || "default"
-      }/${newValue.metadata.name}`;
 
-      // Store ONLY the clean display format as the main value
-      // This is what user sees in field, review page, etc.
+      // Store ONLY the clean display format
+      // This is what user sees everywhere: dropdown, field, review
       onChange(displayValue);
       setSelectedEntity(newValue);
 
-      // Store entityRef in a separate hidden field for template access
-      // This won't show up in review but will be accessible in YAML
-      const fieldName =
-        schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
-
-      // Use formContext to store entityRef in a hidden field
-      if (formContext && formContext.formData) {
-        formContext.formData[`${fieldName}EntityRef`] = entityRef;
-      }
-
-      // Also store in window for debugging
-      if (typeof window !== "undefined") {
-        window.enhancedEntityPickerData = window.enhancedEntityPickerData || {};
-        window.enhancedEntityPickerData[fieldName] = {
-          entityRef,
+      // Store entity data for debugging/development only
+      if (
+        typeof window !== "undefined" &&
+        process.env.NODE_ENV === "development"
+      ) {
+        window.enhancedEntityPickerDebug =
+          window.enhancedEntityPickerDebug || {};
+        const fieldName =
+          schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
+        window.enhancedEntityPickerDebug[fieldName] = {
+          displayValue,
+          entityRef: `${newValue.kind.toLowerCase()}:${
+            newValue.metadata.namespace || "default"
+          }/${newValue.metadata.name}`,
           entity: newValue,
         };
       }
     } else {
       onChange("");
       setSelectedEntity(null);
-
-      // Clear stored data
-      const fieldName =
-        schema.title?.toLowerCase().replace(/\s+/g, "") || "entity";
-      if (formContext && formContext.formData) {
-        delete formContext.formData[`${fieldName}EntityRef`];
-      }
     }
   };
 
-  // Create display options - ONLY clean formatted options with deduplication
+  // Create display options with deduplication
   const displayOptions = entities
     .map((entity) => ({
       entity,
@@ -202,7 +191,7 @@ export const EnhancedEntityPicker = ({
           <Box component="li" {...props}>
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
-              {/* Only show description if it exists, DON'T show entityRef */}
+              {/* Only show description if it exists, NO entityRef */}
               {option.entity.metadata.description && (
                 <Box sx={{ fontSize: "0.875rem", color: "text.secondary" }}>
                   {option.entity.metadata.description}
@@ -213,7 +202,7 @@ export const EnhancedEntityPicker = ({
         )}
       />
 
-      {/* Debug information */}
+      {/* Debug information - development only */}
       {process.env.NODE_ENV === "development" && (
         <Box
           sx={{
@@ -224,57 +213,20 @@ export const EnhancedEntityPicker = ({
             fontSize: "11px",
           }}
         >
-          <strong>Debug - Dropdown Options ({displayOptions.length}):</strong>
-          <div
-            style={{ maxHeight: "100px", overflow: "auto", marginTop: "4px" }}
-          >
-            {displayOptions.slice(0, 5).map((opt, idx) => (
-              <div key={idx}>
-                {idx + 1}. "{opt.displayText}"
-              </div>
-            ))}
-            {displayOptions.length > 5 && (
-              <div>... and {displayOptions.length - 5} more</div>
-            )}
-          </div>
-
+          <strong>Debug Info:</strong>
+          <div>Dropdown Options: {displayOptions.length}</div>
           {selectedEntity && (
-            <>
-              <strong style={{ marginTop: "8px", display: "block" }}>
-                Selected:
-              </strong>
+            <div style={{ marginTop: "4px" }}>
               <div>
-                Display: "{formatEntityDisplay(displayTemplate, selectedEntity)}
-                "
+                ✅ User sees: "
+                {formatEntityDisplay(displayTemplate, selectedEntity)}"
               </div>
               <div>
-                EntityRef: {selectedEntity.kind.toLowerCase()}:
+                🔧 EntityRef: {selectedEntity.kind.toLowerCase()}:
                 {selectedEntity.metadata.namespace || "default"}/
                 {selectedEntity.metadata.name}
               </div>
-
-              <strong style={{ marginTop: "8px", display: "block" }}>
-                Available in YAML:
-              </strong>
-              <div
-                style={{
-                  fontFamily: "monospace",
-                  fontSize: "10px",
-                  background: "#f0f0f0",
-                  padding: "4px",
-                  marginTop: "4px",
-                }}
-              >
-                {`parameters.${
-                  schema.title?.toLowerCase().replace(/\s+/g, "") || "entity"
-                }: "${formatEntityDisplay(displayTemplate, selectedEntity)}"
-parameters.${
-                  schema.title?.toLowerCase().replace(/\s+/g, "") || "entity"
-                }EntityRef: "${selectedEntity.kind.toLowerCase()}:${
-                  selectedEntity.metadata.namespace || "default"
-                }/${selectedEntity.metadata.name}"`}
-              </div>
-            </>
+            </div>
           )}
         </Box>
       )}
@@ -282,9 +234,9 @@ parameters.${
   );
 };
 
-// Global type declaration
+// Global type declaration for debugging
 declare global {
   interface Window {
-    enhancedEntityPickerData?: { [key: string]: any };
+    enhancedEntityPickerDebug?: { [key: string]: any };
   }
 }
