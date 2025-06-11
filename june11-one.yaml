@@ -1,350 +1,4 @@
-# Working Example - Clean Entity Display (No Custom Actions!)
-apiVersion: scaffolder.backstage.io/v1beta3
-kind: Template
-metadata:
-  name: enhanced-entity-picker-simple
-  title: Enhanced Entity Picker - Simple Example
-  description: Clean entity display without custom actions
-spec:
-  owner: platform-team
-  type: example
-  
-  parameters:
-    - title: Project Configuration
-      required:
-        - name
-        - secondaryOwner
-      properties:
-        name:
-          title: Name
-          type: string
-          description: Unique name of the component
-          
-        secondaryOwner:
-          title: Secondary Owner  
-          type: string
-          description: Choose a secondary owner for this project
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.name }} (${{ spec.profile.email }})"
-            catalogFilter:
-              kind: User
-            
-        teamLead:
-          title: Team Lead
-          type: string
-          description: Select the team lead
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ spec.profile.title || 'Team Lead' }}"
-            catalogFilter:
-              kind: User
-              "spec.profile.role": "team-lead"
-          
-        owningTeam:
-          title: Owning Team
-          type: string
-          description: Team that will own this component
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "🏢 ${{ metadata.name }} (${{ spec.children.length || 0 }} members)"
-            catalogFilter:
-              kind: Group
-              "spec.type": "team"
-          
-  steps:
-    - id: log-clean-values
-      name: Log Clean Display Values
-      action: debug:log
-      input:
-        message: |
-          🎯 CLEAN VALUES (What users see and what you get):
-          
-          Project Name: ${{ parameters.name }}
-          Secondary Owner: ${{ parameters.secondaryOwner }}
-          Team Lead: ${{ parameters.teamLead }}
-          Owning Team: ${{ parameters.owningTeam }}
-          
-          ✅ No ugly "user:default/username" references!
-          ✅ Clean, readable format in logs and files!
-          ✅ Perfect for user-facing content!
-          
-    - id: create-readme
-      name: Create README with Clean Owner Info
-      action: fs:write
-      input:
-        path: ./README.md
-        content: |
-          # ${{ parameters.name }}
-          
-          ## Project Information
-          
-          **Secondary Owner**: ${{ parameters.secondaryOwner }}  
-          **Team Lead**: ${{ parameters.teamLead }}  
-          **Owning Team**: ${{ parameters.owningTeam }}
-          
-          ## Getting Started
-          
-          Contact ${{ parameters.secondaryOwner }} for questions about this project.
-          
-          The team lead ${{ parameters.teamLead }} can help with technical decisions.
-          
-          ---
-          *Managed by ${{ parameters.owningTeam }}*
-          
-    - id: create-catalog-info
-      name: Create Catalog Info
-      action: fs:write
-      input:
-        path: ./catalog-info.yaml
-      content: |
-        apiVersion: backstage.io/v1alpha1
-        kind: Component
-        metadata:
-          name: ${{ parameters.name }}
-          title: ${{ parameters.name }}
-          description: Generated component with clean owner references
-          annotations:
-            secondary-owner: "${{ parameters.secondaryOwner }}"
-            team-lead: "${{ parameters.teamLead }}"
-            owning-team: "${{ parameters.owningTeam }}"
-        spec:
-          type: service
-          lifecycle: experimental
-          # Note: For spec.owner, you'd typically want entity references
-          # But for display purposes, our clean format is perfect!
-
----
-
-# Advanced Example - Multiple Entity Types
-apiVersion: scaffolder.backstage.io/v1beta3
-kind: Template
-metadata:
-  name: enhanced-entity-picker-advanced
-  title: Enhanced Entity Picker - Advanced Example
-  description: Multiple entity types with custom formatting
-spec:
-  owner: platform-team
-  type: example
-  
-  parameters:
-    - title: Service Setup
-      required:
-        - serviceName
-        - serviceOwner
-      properties:
-        serviceName:
-          title: Service Name
-          type: string
-          
-        serviceOwner:
-          title: Service Owner
-          type: string
-          description: Primary owner of this service
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "👤 ${{ metadata.name }} (${{ spec.profile.email }}) - ${{ spec.profile.department || 'No Dept' }}"
-            catalogFilter:
-              kind: User
-              
-        backupOwner:
-          title: Backup Owner
-          type: string
-          description: Backup owner for this service
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "🔄 ${{ metadata.name }} [${{ spec.profile.level || 'Unknown' }}]"
-            catalogFilter:
-              kind: User
-              
-        targetSystem:
-          title: Target System
-          type: string
-          description: System where this service will run
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "🏗️ ${{ metadata.name }} - ${{ spec.owner }} [${{ spec.lifecycle }}]"
-            catalogFilter:
-              kind: System
-              
-        dependencies:
-          title: Service Dependencies
-          type: array
-          description: Other services this depends on
-          items:
-            type: string
-            ui:field: EnhancedEntityPicker
-            ui:options:
-              displayEntityFieldAfterFormatting: "⚙️ ${{ metadata.name }} v${{ spec.lifecycle || 'unknown' }}"
-              catalogFilter:
-                kind: Component
-                "spec.type": "service"
-                
-  steps:
-    - id: log-service-config
-      name: Log Service Configuration
-      action: debug:log
-      input:
-        message: |
-          🚀 SERVICE CONFIGURATION:
-          
-          Service: ${{ parameters.serviceName }}
-          Owner: ${{ parameters.serviceOwner }}
-          Backup: ${{ parameters.backupOwner }}
-          System: ${{ parameters.targetSystem }}
-          Dependencies: ${{ parameters.dependencies | join(', ') }}
-          
-          📧 NOTIFICATION PREVIEW:
-          "Hi ${{ parameters.serviceOwner }}, 
-          your service '${{ parameters.serviceName }}' is ready!
-          Backup owner: ${{ parameters.backupOwner }}
-          Target system: ${{ parameters.targetSystem }}"
-          
-    - id: create-service-config
-      name: Create Service Configuration
-      action: fs:write
-      input:
-        path: ./service.yaml
-        content: |
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: ${{ parameters.serviceName }}
-            labels:
-              owner: "${{ parameters.serviceOwner }}"
-              backup-owner: "${{ parameters.backupOwner }}"
-              target-system: "${{ parameters.targetSystem }}"
-            annotations:
-              service-dependencies: "${{ parameters.dependencies | join(',') }}"
-          spec:
-            # Clean, readable owner information
-            owner: "${{ parameters.serviceOwner }}"
-            backup: "${{ parameters.backupOwner }}"
-            system: "${{ parameters.targetSystem }}"
-            dependencies:
-              {{#each parameters.dependencies}}
-              - "${{ this }}"
-              {{/each}}
-
----
-
-# Real-world Example - Microservice Template
-apiVersion: scaffolder.backstage.io/v1beta3
-kind: Template
-metadata:
-  name: microservice-clean-owners
-  title: Microservice with Clean Owner Display
-  description: Production-ready microservice template
-spec:
-  owner: platform-team
-  type: service
-  
-  parameters:
-    - title: Basic Information
-      required:
-        - name
-        - description
-        - owner
-        - team
-      properties:
-        name:
-          title: Service Name
-          type: string
-          pattern: '^[a-z0-9-]+
-          description: Unique name for your microservice
-          
-        description:
-          title: Description
-          type: string
-          description: Brief description of what this service does
-          
-        owner:
-          title: Service Owner
-          type: string
-          description: Person responsible for this service
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.name }} (${{ spec.profile.email }})"
-            catalogFilter:
-              kind: User
-              
-        team:
-          title: Owning Team
-          type: string
-          description: Team that owns this service
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ spec.profile.displayName }}"
-            catalogFilter:
-              kind: Group
-              "spec.type": "team"
-              
-    - title: Architecture
-      properties:
-        database:
-          title: Database
-          type: string
-          description: Database this service will use
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            displayEntityFieldAfterFormatting: "🗄️ ${{ metadata.name }} [${{ spec.type }}] - ${{ spec.lifecycle }}"
-            catalogFilter:
-              kind: Resource
-              "spec.type": "database"
-              
-        apis:
-          title: APIs Dependencies
-          type: array
-          description: External APIs this service depends on
-          items:
-            type: string
-            ui:field: EnhancedEntityPicker
-            ui:options:
-              displayEntityFieldAfterFormatting: "🔌 ${{ metadata.name }} v${{ spec.definition.openapi || 'unknown' }}"
-              catalogFilter:
-                kind: API
-                
-  steps:
-    - id: log-microservice-setup
-      name: Log Microservice Setup
-      action: debug:log
-      input:
-        message: |
-          🏗️ MICROSERVICE SETUP:
-          
-          Name: ${{ parameters.name }}
-          Description: ${{ parameters.description }}
-          Owner: ${{ parameters.owner }}
-          Team: ${{ parameters.team }}
-          Database: ${{ parameters.database }}
-          API Dependencies: ${{ parameters.apis | join(', ') }}
-          
-          📋 SLACK NOTIFICATION READY:
-          "New microservice '${{ parameters.name }}' created!
-          Owner: ${{ parameters.owner }}
-          Team: ${{ parameters.team }}
-          Description: ${{ parameters.description }}"
-          
-    - id: create-dockerfile
-      name: Create Dockerfile
-      action: fs:write
-      input:
-        path: ./Dockerfile
-        content: |
-          FROM node:18-alpine
-          
-          # Service metadata
-          LABEL service.name="${{ parameters.name }}"
-          LABEL service.owner="${{ parameters.owner }}"
-          LABEL service.team="${{ parameters.team }}"
-          LABEL service.description="${{ parameters.description }}"
-          
-          WORKDIR /app
-          COPY package*.json ./
-          RUN npm ci --only=production
-          COPY . .
-          
-          EXPOSE 3000# Simple Example - One Property Only
+# Simple Example - One Property Only
 
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
@@ -355,7 +9,7 @@ metadata:
 spec:
   owner: platform-team
   type: example
-  
+
   parameters:
     - title: Basic Setup
       required:
@@ -366,7 +20,7 @@ spec:
           title: Project Name
           type: string
           description: Name of your project
-          
+
         owner:
           title: Project Owner
           type: string
@@ -376,7 +30,7 @@ spec:
             displayEntityFieldAfterFormatting: "${{ metadata.name }} (${{ spec.profile.email }})"
             catalogFilter:
               kind: User
-              
+
   steps:
     - id: show-what-we-got
       name: Show What We Got
@@ -384,27 +38,27 @@ spec:
       input:
         message: |
           📋 SIMPLE TEST RESULTS:
-          
+
           Project Name: ${{ parameters.projectName }}
           Owner (what form stores): ${{ parameters.owner }}
-          
+
     - id: resolve-owner-data
       name: Resolve Owner Data
       action: catalog:fetch
       input:
         entityRef: ${{ parameters.owner }}
-        
+
     - id: show-resolved-data
       name: Show Resolved Data
       action: debug:log
       input:
         message: |
           🎯 RESOLVED ENTITY DATA:
-          
+
           Owner Name: ${{ steps['resolve-owner-data'].output.entity.metadata.name }}
           Owner Email: ${{ steps['resolve-owner-data'].output.entity.spec.profile.email }}
           Owner Department: ${{ steps['resolve-owner-data'].output.entity.spec.profile.department || 'Unknown' }}
-          
+
     - id: create-simple-file
       name: Create Simple File
       action: fs:write
@@ -415,46 +69,3 @@ spec:
           Owner: ${{ steps['resolve-owner-data'].output.entity.metadata.name }}
           Email: ${{ steps['resolve-owner-data'].output.entity.spec.profile.email }}
           Entity Reference: ${{ parameters.owner }}
-          CMD ["npm", "start"]
-          
-    - id: create-k8s-manifest
-      name: Create Kubernetes Manifest
-      action: fs:write
-      input:
-        path: ./k8s/deployment.yaml
-        content: |
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ${{ parameters.name }}
-            labels:
-              app: ${{ parameters.name }}
-              owner: "${{ parameters.owner }}"
-              team: "${{ parameters.team }}"
-            annotations:
-              service.owner: "${{ parameters.owner }}"
-              service.team: "${{ parameters.team }}"
-              service.database: "${{ parameters.database }}"
-          spec:
-            replicas: 3
-            selector:
-              matchLabels:
-                app: ${{ parameters.name }}
-            template:
-              metadata:
-                labels:
-                  app: ${{ parameters.name }}
-                annotations:
-                  owner: "${{ parameters.owner }}"
-                  team: "${{ parameters.team }}"
-              spec:
-                containers:
-                - name: ${{ parameters.name }}
-                  image: ${{ parameters.name }}:latest
-                  ports:
-                  - containerPort: 3000
-                  env:
-                  - name: SERVICE_OWNER
-                    value: "${{ parameters.owner }}"
-                  - name: SERVICE_TEAM  
-                    value: "${{ parameters.team }}"
