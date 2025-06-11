@@ -1,0 +1,92 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: enhanced-entity-picker-demo
+  title: Enhanced Entity Picker Demo
+  description: Demonstrates the EnhancedEntityPicker with hidden entity reference
+spec:
+  owner: user:default/example-owner
+  type: service
+  parameters:
+    - title: Basic Information
+      required:
+        - name
+        - secondaryOwner
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Name of the component
+        secondaryOwner:
+          title: Secondary Owner
+          type: string
+          description: You will be primary owner, please choose a secondary owner
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            # Format for display
+            displayEntityFieldAfterFormatting: ${{ metadata.name }} (${{ spec.profile.email }}) - ${{ spec.profile.displayName || "" }}
+            # Store entity reference in a hidden field
+            entityRefField: secondaryOwnerRef
+            catalogFilter:
+              kind: User
+        # Hidden field to store the entity reference
+        secondaryOwnerRef:
+          title: Secondary Owner Reference
+          type: string
+          description: Entity reference for the secondary owner
+          ui:widget: hidden
+
+  steps:
+    # For debugging: Log both fields
+    - id: log-values
+      name: Log Values
+      action: debug:log
+      input:
+        message: "Selected secondary owner:"
+        display_value: "${{ parameters.secondaryOwner }}"
+        entity_ref: "${{ parameters.secondaryOwnerRef }}"
+
+    # Use the built-in catalog:fetch-entity action with the entity reference
+    - id: fetch-entity
+      name: Fetch Entity
+      action: catalog:fetch-entity
+      input:
+        entityRef: "${{ parameters.secondaryOwnerRef }}"
+
+    # Use the entity data in subsequent steps
+    - id: use-entity-data
+      name: Use Entity Data
+      action: debug:log
+      input:
+        message: "Secondary owner details:"
+        # Use the display value from our field
+        display: "${{ parameters.secondaryOwner }}"
+        # Use entity data from the fetch-entity action
+        entity_ref: "${{ steps['fetch-entity'].output.entityRef }}"
+        name: "${{ steps['fetch-entity'].output.name }}"
+        email: "${{ steps['fetch-entity'].output.spec.profile.email }}"
+        display_name: "${{ steps['fetch-entity'].output.spec.profile.displayName }}"
+
+        # Access any property from the entity
+        job_title: "${{ steps['fetch-entity'].output.spec.profile.jobTitle || 'N/A' }}"
+        department: "${{ steps['fetch-entity'].output.spec.profile.department || 'N/A' }}"
+
+    # Example of using the entity data in a real step
+    - id: generate-owners-file
+      name: Generate CODEOWNERS file
+      action: fs:write
+      input:
+        path: .github/CODEOWNERS
+        content: |
+          # This file is generated - do not edit manually
+
+          # Default owner
+          * ${{ steps['fetch-entity'].output.spec.profile.email }}
+
+          # Documentation ownership
+          /docs/ ${{ steps['fetch-entity'].output.spec.profile.email }}
+
+          # Owner information:
+          # Name: ${{ steps['fetch-entity'].output.spec.profile.displayName }}
+          # Title: ${{ steps['fetch-entity'].output.spec.profile.jobTitle || 'N/A' }}
+          # Department: ${{ steps['fetch-entity'].output.spec.profile.department || 'N/A' }}
