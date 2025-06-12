@@ -82,12 +82,12 @@ export const resolveEntityFromDisplayAction = () => {
         ctx.logger.info(`🔧 Using template: "${displayTemplate}"`);
         ctx.logger.info(`🔧 Catalog filter: ${JSON.stringify(catalogFilter)}`);
 
-        // Validate that template includes metadata.name
+        // Validate that template includes metadata.name (REQUIRED)
         if (!displayTemplate.includes("metadata.name")) {
           throw new Error(
             `Template must include 'metadata.name' to extract actual entity name. ` +
               `Current template: "${displayTemplate}". ` +
-              `Example: Include metadata.name in your template like: "name - title - department"`
+              `metadata.name is required for catalog:fetch to work properly.`
           );
         }
 
@@ -149,21 +149,23 @@ export const resolveEntityFromDisplayAction = () => {
         const parsedValues = parseTemplate(displayTemplate, displayValue);
         ctx.logger.info(`🎯 Parsed values: ${JSON.stringify(parsedValues)}`);
 
-        // Extract the actual entity name (metadata.name is required)
+        // Extract the ACTUAL entity name (metadata.name is required - no fallbacks!)
         const extractedName = parsedValues["metadata.name"];
 
         if (!extractedName) {
           throw new Error(
             `Could not extract metadata.name from parsed values. ` +
               `Parsed: ${JSON.stringify(parsedValues)}. ` +
-              `Make sure your template includes metadata.name and the display value matches the template.`
+              `The template must include metadata.name and your display value must match the template exactly.`
           );
         }
 
-        // Create entity reference using the ACTUAL entity name (no conversion needed)
+        // Create entity reference using the REAL entity name (no conversion!)
         const entityRef = `${entityKind.toLowerCase()}:${entityNamespace}/${extractedName}`;
 
-        ctx.logger.info(`✅ Extracted entity name: "${extractedName}"`);
+        ctx.logger.info(
+          `✅ Extracted entity name: "${extractedName}" (from metadata.name)`
+        );
         ctx.logger.info(`✅ Entity kind: ${entityKind}`);
         ctx.logger.info(`✅ Entity reference: ${entityRef}`);
 

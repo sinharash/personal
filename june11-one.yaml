@@ -1,11 +1,11 @@
-# Fixed YAML - Requires metadata.name in template + dynamic entity kind
+# Final YAML - REQUIRES metadata.name in template (correct approach)
 
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: fixed-enhanced-entity-picker
-  title: Fixed Enhanced Entity Picker
-  description: Properly extracts metadata.name and gets entity kind dynamically
+  name: final-enhanced-entity-picker
+  title: Final Enhanced Entity Picker
+  description: Correctly extracts metadata.name for accurate entity resolution
 spec:
   owner: platform-team
   type: test
@@ -20,31 +20,32 @@ spec:
           type: string
           ui:field: EnhancedEntityPicker
           ui:options:
-            # FIXED: Template MUST include metadata.name for accurate entity reference
+            # CRITICAL: Template MUST include metadata.name for accurate entity resolution
             displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
             catalogFilter:
-              kind: User # This will be extracted dynamically
+              kind: User
 
   steps:
-    # STEP 1: Extract entity reference using metadata.name (guaranteed to exist)
+    # STEP 1: Extract entity reference using REAL metadata.name (no guessing!)
     - id: extract-reference
       name: Extract Entity Reference
       action: enhanced:resolveEntity
       input:
         displayValue: ${{ parameters.selectedEntity }}
+        # MUST match exactly what's in ui:options above AND include metadata.name
         displayTemplate: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
-        catalogFilter: # Pass the entire filter to extract entity kind
+        catalogFilter:
           kind: User
         entityNamespace: "default"
 
-    # STEP 2: Use built-in catalog:fetch with the REAL entity name
+    # STEP 2: Use built-in catalog:fetch with REAL entity name (guaranteed to work)
     - id: fetch-entity
       name: Fetch Entity Data
       action: catalog:fetch
       input:
         entityRef: ${{ steps['extract-reference'].output.entityRef }}
 
-    # RESULT: Show that we have accurate entity resolution
+    # RESULT: Show successful entity resolution
     - id: show-result
       name: Show Result
       action: debug:log
@@ -66,4 +67,6 @@ spec:
           - Department: ${{ steps['fetch-entity'].output.entity.spec.profile.department || 'N/A' }}
           - Email: ${{ steps['fetch-entity'].output.entity.spec.profile.email || 'N/A' }}
 
-          🎉 Perfect! Now using REAL entity names, not guessed ones!
+          🎉 Perfect! Using REAL entity names (metadata.name), not guessed ones!
+
+          ⚠️ Developer Note: Your template MUST include metadata.name for this to work!

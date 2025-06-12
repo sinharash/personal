@@ -24,10 +24,8 @@ const cloudExperienceScaffolderModule = createBackendModule({
           dataAuroraClusterCreateAction({ config, discovery })
         );
 
-        // Register the simplified enhanced entity picker action
-        scaffolder.addActions(
-          resolveEntityFromDisplayAction() // No dependencies needed
-        );
+        // Register the enhanced entity picker action (requires metadata.name)
+        scaffolder.addActions(resolveEntityFromDisplayAction());
       },
     });
   },
