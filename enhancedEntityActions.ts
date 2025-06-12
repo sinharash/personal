@@ -3,7 +3,7 @@
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 import { CatalogClient } from "@backstage/catalog-client";
 
-// ADD THIS: The full entity resolution action for composite templates
+// FIXED: The full entity resolution action with proper authentication
 export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
   const { discovery } = options;
 
@@ -71,10 +71,10 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
           `Resolving entity: "${displayValue}" with template: "${displayTemplate}"`
         );
 
-        // Create catalog client with discovery
+        // FIXED: Create catalog client with proper authentication from context
         const catalogApi = new CatalogClient({
           discoveryApi: discovery,
-          fetchApi: { fetch },
+          fetchApi: ctx, // Use the authenticated fetch from context
         });
 
         // Build filter for entity search
@@ -260,13 +260,14 @@ export const debugEntityPropertiesAction = () => {
   });
 };
 
-// Simple action that extracts entityRef from display format
-export const extractEntityRefAction = () => {
+// Simple action that extracts entityRef from display format - ALSO FIXED
+export const extractEntityRefAction = (options: { discovery: any }) => {
+  const { discovery } = options;
+
   return createTemplateAction<{
     displayValue: string;
     displayTemplate: string;
-    entityKind?: string;
-    entityNamespace?: string;
+    catalogFilter?: any;
   }>({
     id: "enhanced:extractEntityRef",
     description:
@@ -286,17 +287,10 @@ export const extractEntityRefAction = () => {
             title: "Display Template",
             description: "Template used to format the display",
           },
-          entityKind: {
-            type: "string",
-            title: "Entity Kind",
-            description: "Expected entity kind (User, Component, etc.)",
-            default: "User",
-          },
-          entityNamespace: {
-            type: "string",
-            title: "Entity Namespace",
-            description: "Expected entity namespace",
-            default: "default",
+          catalogFilter: {
+            type: "object",
+            title: "Catalog Filter",
+            description: "Filter to narrow down entity search",
           },
         },
       },
@@ -317,54 +311,66 @@ export const extractEntityRefAction = () => {
       },
     },
     async handler(ctx) {
-      const {
-        displayValue,
-        displayTemplate,
-        entityKind = "User",
-        entityNamespace = "default",
-      } = ctx.input;
+      const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
 
       try {
         ctx.logger.info(`Extracting entity reference from: "${displayValue}"`);
 
-        // Parse different display template patterns
-        let extractedName = "";
+        // FIXED: Use the same catalog search approach as resolveEntity
+        const catalogApi = new CatalogClient({
+          discoveryApi: discovery,
+          fetchApi: ctx, // Use authenticated fetch from context
+        });
 
-        // Pattern 1: "Name [Kind]" -> extract Name
-        const kindBracketMatch = displayValue.match(/^(.+?)\s*\[.+\]$/);
-        if (kindBracketMatch) {
-          extractedName = kindBracketMatch[1].trim();
+        // Build filter
+        const filter: any = {};
+        if (catalogFilter.kind) {
+          filter.kind = catalogFilter.kind;
         }
-        // Pattern 2: "Name (email)" -> extract Name
-        else if (displayValue.includes("(") && displayValue.includes(")")) {
-          const emailParenMatch = displayValue.match(/^(.+?)\s*\(/);
-          if (emailParenMatch) {
-            extractedName = emailParenMatch[1].trim();
+        if (catalogFilter.type) {
+          filter["spec.type"] = catalogFilter.type;
+        }
+
+        Object.keys(catalogFilter).forEach((key) => {
+          if (key !== "kind" && key !== "type") {
+            filter[key] = catalogFilter[key];
           }
-        }
-        // Pattern 3: Just the name
-        else {
-          extractedName = displayValue.trim();
-        }
+        });
 
-        if (!extractedName) {
+        // Fetch entities and find match
+        const response = await catalogApi.getEntities({ filter });
+
+        const formatEntityDisplay = (template: string, entity: any): string => {
+          return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+            const trimmedPath = path.trim();
+            const value = trimmedPath
+              .split(".")
+              .reduce((obj: any, key: string) => {
+                return obj && obj[key] !== undefined ? obj[key] : "";
+              }, entity);
+            return value || "";
+          });
+        };
+
+        const matchingEntity = response.items.find((entity) => {
+          const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
+          return formattedDisplay === displayValue;
+        });
+
+        if (!matchingEntity) {
           throw new Error(
-            `Could not extract entity name from display value: "${displayValue}"`
+            `Could not find entity matching display value: "${displayValue}"`
           );
         }
 
-        // Convert name to entity reference format
-        const entityName = extractedName
-          .toLowerCase()
-          .replace(/\s+/g, ".")
-          .replace(/[^a-z0-9.\-_]/g, "");
-
-        const entityRef = `${entityKind.toLowerCase()}:${entityNamespace}/${entityName}`;
+        const entityRef = `${matchingEntity.kind.toLowerCase()}:${
+          matchingEntity.metadata.namespace || "default"
+        }/${matchingEntity.metadata.name}`;
 
         ctx.logger.info(`✅ Extracted entity reference: ${entityRef}`);
 
         ctx.output("entityRef", entityRef);
-        ctx.output("extractedName", extractedName);
+        ctx.output("extractedName", matchingEntity.metadata.name);
       } catch (error) {
         ctx.logger.error(`Error extracting entity reference: ${error}`);
         throw new Error(
@@ -377,7 +383,7 @@ export const extractEntityRefAction = () => {
   });
 };
 
-// Alternative: Parse email from display format
+// Alternative: Parse email from display format - NO CHANGES NEEDED
 export const extractEmailFromDisplayAction = () => {
   return createTemplateAction<{
     displayValue: string;

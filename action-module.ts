@@ -9,6 +9,8 @@ import { dataAuroraClusterCreateAction } from "./actions/dataAuroraClusterCreate
 import {
   resolveEntityFromDisplayAction,
   debugEntityPropertiesAction,
+  extractEntityRefAction,
+  extractEmailFromDisplayAction,
 } from "./actions/enhancedEntityActions";
 
 const cloudExperienceScaffolderModule = createBackendModule({
@@ -28,9 +30,12 @@ const cloudExperienceScaffolderModule = createBackendModule({
         );
 
         // Register the new enhanced entity picker actions
+        // FIXED: Pass discovery to extractEntityRefAction too
         scaffolder.addActions(
           resolveEntityFromDisplayAction({ discovery }),
-          debugEntityPropertiesAction()
+          debugEntityPropertiesAction(),
+          extractEntityRefAction({ discovery }), // Now requires discovery
+          extractEmailFromDisplayAction()
         );
       },
     });
