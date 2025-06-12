@@ -2,7 +2,7 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 
-// DEBUGGING VERSION: The full entity resolution action with extensive logging
+// DEBUGGING VERSION: The full entity resolution action with extensive logging and ANY types
 export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
   const { discovery } = options;
 
@@ -62,7 +62,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
         },
       },
     },
-    async handler(ctx) {
+    async handler(ctx: any) {
       const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
 
       try {
@@ -86,7 +86,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
         }
 
         // Add any additional filters
-        Object.keys(catalogFilter).forEach((key) => {
+        Object.keys(catalogFilter).forEach((key: any) => {
           if (key !== "kind" && key !== "type") {
             queryParams.append("filter", `${key}=${catalogFilter[key]}`);
           }
@@ -103,7 +103,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
         const { URL } = require("url");
 
         const fetchEntities = (): Promise<any> => {
-          return new Promise((resolve, reject) => {
+          return new Promise((resolve: any, reject: any) => {
             const parsedUrl = new URL(catalogUrl);
             const client = parsedUrl.protocol === "https:" ? https : http;
 
@@ -163,7 +163,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
                     ctx.logger.info(`📋 Items found: ${parsed.items.length}`);
                   }
                   resolve(parsed);
-                } catch (err) {
+                } catch (err: any) {
                   ctx.logger.error(`❌ JSON Parse error: ${err}`);
                   ctx.logger.error(`❌ Raw data: ${data.substring(0, 500)}`);
                   reject(err);
@@ -191,7 +191,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
         // Log some sample entities for debugging
         if (entities.length > 0) {
           ctx.logger.info("📋 Sample entities:");
-          entities.slice(0, 3).forEach((entity, index) => {
+          entities.slice(0, 3).forEach((entity: any, index: any) => {
             ctx.logger.info(
               `  ${index + 1}. ${entity.kind}:${entity.metadata.namespace}/${
                 entity.metadata.name
@@ -210,20 +210,23 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
 
         // Generic function to format entity display (same logic as component)
         const formatEntityDisplay = (template: string, entity: any): string => {
-          return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-            const trimmedPath = path.trim();
-            const value = trimmedPath
-              .split(".")
-              .reduce((obj: any, key: string) => {
-                return obj && obj[key] !== undefined ? obj[key] : "";
-              }, entity);
-            return value || "";
-          });
+          return template.replace(
+            /\$\{\{\s*([^}]+)\s*\}\}/g,
+            (match: any, path: any) => {
+              const trimmedPath = path.trim();
+              const value = trimmedPath
+                .split(".")
+                .reduce((obj: any, key: string) => {
+                  return obj && obj[key] !== undefined ? obj[key] : "";
+                }, entity);
+              return value || "";
+            }
+          );
         };
 
         // DEBUG: Try formatting a few entities to see what we get
         ctx.logger.info("🔧 Testing template formatting:");
-        entities.slice(0, 3).forEach((entity, index) => {
+        entities.slice(0, 3).forEach((entity: any, index: any) => {
           const formatted = formatEntityDisplay(displayTemplate, entity);
           ctx.logger.info(`  ${index + 1}. Formatted: "${formatted}"`);
           ctx.logger.info(`     Looking for: "${displayValue}"`);
@@ -233,7 +236,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
         });
 
         // Find entity that matches the display value
-        const matchingEntity = entities.find((entity) => {
+        const matchingEntity = entities.find((entity: any) => {
           const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
           const matches = formattedDisplay === displayValue;
           if (matches) {
@@ -251,7 +254,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
           ctx.logger.info(`🔧 Template used: "${displayTemplate}"`);
           ctx.logger.info(`📋 Available entities (first 10):`);
 
-          entities.slice(0, 10).forEach((entity, index) => {
+          entities.slice(0, 10).forEach((entity: any, index: any) => {
             const formatted = formatEntityDisplay(displayTemplate, entity);
             ctx.logger.info(
               `  ${index + 1}. Formatted: "${formatted}" | Entity: ${
@@ -278,7 +281,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
         ctx.output("spec", matchingEntity.spec || {});
 
         ctx.logger.info("🎉 ENHANCED ENTITY RESOLVER COMPLETED SUCCESSFULLY");
-      } catch (error) {
+      } catch (error: any) {
         ctx.logger.error(`💥 ENHANCED ENTITY RESOLVER FAILED`);
         ctx.logger.error(`❌ Error type: ${error.constructor.name}`);
         ctx.logger.error(`❌ Error message: ${error.message}`);
@@ -334,7 +337,7 @@ export const resolveEntityUsingCatalogFetchAction = () => {
         },
       },
     },
-    async handler(ctx) {
+    async handler(ctx: any) {
       ctx.logger.info(
         "🔄 ALTERNATIVE RESOLVER: This action will guide you to use catalog:fetch instead"
       );
@@ -396,7 +399,7 @@ export const debugEntityPropertiesAction = () => {
         },
       },
     },
-    async handler(ctx) {
+    async handler(ctx: any) {
       const { entity } = ctx.input;
 
       if (!entity || typeof entity !== "object") {
@@ -414,7 +417,7 @@ export const debugEntityPropertiesAction = () => {
           return [];
 
         const keys: string[] = [];
-        Object.keys(obj).forEach((key) => {
+        Object.keys(obj).forEach((key: any) => {
           const fullKey = prefix ? `${prefix}.${key}` : key;
           keys.push(fullKey);
 
@@ -448,7 +451,7 @@ export const debugEntityPropertiesAction = () => {
           `📋 Available properties (${availableProperties.length}):`
         );
 
-        availableProperties.slice(0, 50).forEach((prop) => {
+        availableProperties.slice(0, 50).forEach((prop: any) => {
           ctx.logger.info(`   - ${prop}`);
         });
 
@@ -463,7 +466,7 @@ export const debugEntityPropertiesAction = () => {
             `\n💡 Access properties in templates using: $\{{ steps['step-name'].output.entity.${availableProperties[0]} }}`
           );
         }
-      } catch (error) {
+      } catch (error: any) {
         ctx.logger.error(`Error debugging entity: ${error}`);
       }
     },
@@ -525,7 +528,7 @@ export const extractEntityRefAction = () => {
         },
       },
     },
-    async handler(ctx) {
+    async handler(ctx: any) {
       const {
         displayValue,
         displayTemplate,
@@ -575,7 +578,7 @@ export const extractEntityRefAction = () => {
 
         ctx.output("entityRef", entityRef);
         ctx.output("extractedName", extractedName);
-      } catch (error) {
+      } catch (error: any) {
         ctx.logger.error(`Error extracting entity reference: ${error}`);
         throw new Error(
           `Failed to extract entity reference: ${
@@ -626,7 +629,7 @@ export const extractEmailFromDisplayAction = () => {
         },
       },
     },
-    async handler(ctx) {
+    async handler(ctx: any) {
       const { displayValue } = ctx.input;
 
       try {
@@ -648,7 +651,7 @@ export const extractEmailFromDisplayAction = () => {
         ctx.output("email", email);
         ctx.output("name", name);
         ctx.output("entityRef", entityRef);
-      } catch (error) {
+      } catch (error: any) {
         ctx.logger.error(`Error extracting email: ${error}`);
         throw new Error(
           `Failed to extract email: ${
