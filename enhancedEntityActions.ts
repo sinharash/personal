@@ -1,15 +1,9 @@
 // packages/backend/src/plugins/scaffolder/actions/enhancedEntityActions.ts
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
-import { CatalogClient } from "@backstage/catalog-client";
-import { DiscoveryService } from "@backstage/backend-plugin-api";
 
 // Generic action to resolve ANY entity from display format
-export const resolveEntityFromDisplayAction = (options: {
-  discovery: DiscoveryService;
-}) => {
-  const { discovery } = options;
-
+export const resolveEntityFromDisplayAction = () => {
   return createTemplateAction<{
     displayValue: string;
     displayTemplate: string;
@@ -31,8 +25,7 @@ export const resolveEntityFromDisplayAction = (options: {
           displayTemplate: {
             type: "string",
             title: "Display Template",
-            description:
-              'Template used to format the display (e.g., "${{ metadata.name }}" or "${{ spec.definition.openapi }}")',
+            description: "Template used to format the display",
           },
           catalogFilter: {
             type: "object",
@@ -70,71 +63,110 @@ export const resolveEntityFromDisplayAction = (options: {
     async handler(ctx) {
       const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
 
-      // Create catalog API client - CORRECTED
-      const catalogApi = new CatalogClient({
-        discoveryApi: discovery,
-        fetchApi: { fetch },
-      });
+      try {
+        // Use the catalog API that's available in the scaffolder context
+        // This should be properly authenticated
+        const catalogApi = ctx.catalogApi;
 
-      // Build filter for entity search
-      const filter: any = {};
-      if (catalogFilter.kind) {
-        filter.kind = catalogFilter.kind;
-      }
-      if (catalogFilter.type) {
-        filter["spec.type"] = catalogFilter.type;
-      }
-
-      // Add any additional filters
-      Object.keys(catalogFilter).forEach((key) => {
-        if (key !== "kind" && key !== "type") {
-          filter[key] = catalogFilter[key];
+        if (!catalogApi) {
+          throw new Error("Catalog API not available in scaffolder context");
         }
-      });
 
-      const response = await catalogApi.getEntities({ filter });
+        ctx.logger.info(
+          `Resolving entity: "${displayValue}" with template: "${displayTemplate}"`
+        );
 
-      // Generic function to format entity display (same logic as component)
-      const formatEntityDisplay = (template: string, entity: any): string => {
-        return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-          const trimmedPath = path.trim();
-          const value = trimmedPath
-            .split(".")
-            .reduce((obj: any, key: string) => {
-              return obj && obj[key] !== undefined ? obj[key] : "";
-            }, entity);
-          return value || "";
+        // Build filter for entity search
+        const filter: any = {};
+        if (catalogFilter.kind) {
+          filter.kind = catalogFilter.kind;
+        }
+        if (catalogFilter.type) {
+          filter["spec.type"] = catalogFilter.type;
+        }
+
+        // Add any additional filters
+        Object.keys(catalogFilter).forEach((key) => {
+          if (key !== "kind" && key !== "type") {
+            filter[key] = catalogFilter[key];
+          }
         });
-      };
 
-      // Find entity that matches the display value - GENERIC approach
-      const matchingEntity = response.items.find((entity) => {
-        const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
-        return formattedDisplay === displayValue;
-      });
+        ctx.logger.info(`Using catalog filter: ${JSON.stringify(filter)}`);
 
-      if (!matchingEntity) {
+        // Fetch entities using the authenticated catalog API
+        const response = await catalogApi.getEntities({ filter });
+
+        ctx.logger.info(`Found ${response.items.length} entities in catalog`);
+
+        // Generic function to format entity display (same logic as component)
+        const formatEntityDisplay = (template: string, entity: any): string => {
+          return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+            const trimmedPath = path.trim();
+            const value = trimmedPath
+              .split(".")
+              .reduce((obj: any, key: string) => {
+                return obj && obj[key] !== undefined ? obj[key] : "";
+              }, entity);
+            return value || "";
+          });
+        };
+
+        // Find entity that matches the display value
+        const matchingEntity = response.items.find((entity) => {
+          const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
+          const matches = formattedDisplay === displayValue;
+          if (matches) {
+            ctx.logger.info(
+              `Found matching entity: ${entity.kind}:${entity.metadata.namespace}/${entity.metadata.name}`
+            );
+          }
+          return matches;
+        });
+
+        if (!matchingEntity) {
+          ctx.logger.error(
+            `Could not find entity matching display value: "${displayValue}"`
+          );
+          ctx.logger.info(`Template used: "${displayTemplate}"`);
+          ctx.logger.info(`Available entities (first 10):`);
+
+          response.items.slice(0, 10).forEach((entity) => {
+            const formatted = formatEntityDisplay(displayTemplate, entity);
+            ctx.logger.info(
+              `  - Formatted: "${formatted}" | Entity: ${entity.kind}:${entity.metadata.namespace}/${entity.metadata.name}`
+            );
+          });
+
+          throw new Error(
+            `Could not find entity matching display value: "${displayValue}". Found ${response.items.length} total entities.`
+          );
+        }
+
+        const entityRef = `${matchingEntity.kind.toLowerCase()}:${
+          matchingEntity.metadata.namespace || "default"
+        }/${matchingEntity.metadata.name}`;
+
+        ctx.logger.info(`✅ Successfully resolved entity: ${entityRef}`);
+
+        // Output the results
+        ctx.output("entity", matchingEntity);
+        ctx.output("entityRef", entityRef);
+        ctx.output("metadata", matchingEntity.metadata);
+        ctx.output("spec", matchingEntity.spec || {});
+      } catch (error) {
+        ctx.logger.error(`Error resolving entity: ${error}`);
+        ctx.logger.error(
+          `Stack trace: ${
+            error instanceof Error ? error.stack : "No stack trace"
+          }`
+        );
         throw new Error(
-          `Could not find entity matching display value: "${displayValue}" using template: "${displayTemplate}". Found ${response.items.length} entities in catalog with the given filter.`
+          `Failed to resolve entity: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
         );
       }
-
-      const entityRef = `${matchingEntity.kind.toLowerCase()}:${
-        matchingEntity.metadata.namespace || "default"
-      }/${matchingEntity.metadata.name}`;
-
-      ctx.logger.info(
-        `✅ Resolved entity: ${entityRef} from display: "${displayValue}"`
-      );
-      ctx.logger.info(
-        `📋 Entity type: ${matchingEntity.kind}, Available properties: metadata, spec, apiVersion, kind`
-      );
-
-      // CORRECTED - Use ctx.output() instead of return
-      ctx.output("entity", matchingEntity); // Complete entity object - access ANY property
-      ctx.output("entityRef", entityRef); // Entity reference for Backstage relationships
-      ctx.output("metadata", matchingEntity.metadata); // Quick access to metadata
-      ctx.output("spec", matchingEntity.spec || {}); // Quick access to spec (if exists)
     },
   });
 };
@@ -162,8 +194,19 @@ export const debugEntityPropertiesAction = () => {
     async handler(ctx) {
       const { entity } = ctx.input;
 
-      const getObjectStructure = (obj: any, prefix = ""): string[] => {
-        if (!obj || typeof obj !== "object") return [];
+      if (!entity || typeof entity !== "object") {
+        ctx.logger.error("Invalid entity provided for debugging");
+        return;
+      }
+
+      const getObjectStructure = (
+        obj: any,
+        prefix = "",
+        maxDepth = 3,
+        currentDepth = 0
+      ): string[] => {
+        if (!obj || typeof obj !== "object" || currentDepth >= maxDepth)
+          return [];
 
         const keys: string[] = [];
         Object.keys(obj).forEach((key) => {
@@ -175,109 +218,49 @@ export const debugEntityPropertiesAction = () => {
             obj[key] !== null &&
             !Array.isArray(obj[key])
           ) {
-            keys.push(...getObjectStructure(obj[key], fullKey));
+            keys.push(
+              ...getObjectStructure(
+                obj[key],
+                fullKey,
+                maxDepth,
+                currentDepth + 1
+              )
+            );
           }
         });
         return keys;
       };
 
-      const availableProperties = getObjectStructure(entity);
+      try {
+        const availableProperties = getObjectStructure(entity);
 
-      ctx.logger.info(
-        `🔍 ENTITY DEBUG - ${entity.kind}:${
-          entity.metadata?.namespace || "default"
-        }/${entity.metadata?.name}`
-      );
-      ctx.logger.info(
-        `📋 Available properties (${availableProperties.length}):`
-      );
-      availableProperties.slice(0, 50).forEach((prop) => {
-        ctx.logger.info(`   - ${prop}`);
-      });
-
-      if (availableProperties.length > 50) {
         ctx.logger.info(
-          `   ... and ${availableProperties.length - 50} more properties`
+          `🔍 ENTITY DEBUG - ${entity.kind}:${
+            entity.metadata?.namespace || "default"
+          }/${entity.metadata?.name}`
         );
-      }
+        ctx.logger.info(
+          `📋 Available properties (${availableProperties.length}):`
+        );
 
-      ctx.logger.info(
-        `\n💡 Access any property in templates using: $\{{ steps['step-name'].output.entity.${availableProperties[0]} }}`
-      );
+        availableProperties.slice(0, 50).forEach((prop) => {
+          ctx.logger.info(`   - ${prop}`);
+        });
+
+        if (availableProperties.length > 50) {
+          ctx.logger.info(
+            `   ... and ${availableProperties.length - 50} more properties`
+          );
+        }
+
+        if (availableProperties.length > 0) {
+          ctx.logger.info(
+            `\n💡 Access properties in templates using: $\{{ steps['step-name'].output.entity.${availableProperties[0]} }}`
+          );
+        }
+      } catch (error) {
+        ctx.logger.error(`Error debugging entity: ${error}`);
+      }
     },
   });
 };
-
-// I need to replace the above handler function for client
-
-// In your enhancedEntityActions.ts - replace the handler with this:
-
-async handler(ctx) {
-    const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
-  
-    try {
-      // Use the simplest approach - backend-to-backend call without auth
-      const catalogUrl = await discovery.getBaseUrl('catalog');
-      const entitiesUrl = `${catalogUrl}/entities`;
-      
-      // Build query parameters
-      const params = new URLSearchParams();
-      Object.entries(catalogFilter).forEach(([key, value]) => {
-        if (value !== undefined) {
-          params.append(`filter[${key}]`, String(value));
-        }
-      });
-      
-      const response = await fetch(`${entitiesUrl}?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const entitiesData = await response.json();
-      const entities = entitiesData.items || entitiesData;
-  
-      ctx.logger.info(`Found ${entities.length} entities`);
-  
-      // Generic function to format entity display
-      const formatEntityDisplay = (template: string, entity: any): string => {
-        return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-          const trimmedPath = path.trim();
-          const value = trimmedPath.split('.').reduce((obj: any, key: string) => {
-            return obj && obj[key] !== undefined ? obj[key] : '';
-          }, entity);
-          return value || '';
-        });
-      };
-  
-      // Find matching entity
-      const matchingEntity = entities.find((entity: any) => {
-        const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
-        return formattedDisplay === displayValue;
-      });
-  
-      if (!matchingEntity) {
-        ctx.logger.error(`Could not find entity matching: "${displayValue}"`);
-        ctx.logger.info('Available entities:');
-        entities.slice(0, 5).forEach((entity: any) => {
-          const formatted = formatEntityDisplay(displayTemplate, entity);
-          ctx.logger.info(`  - "${formatted}"`);
-        });
-        throw new Error(`Entity not found: "${displayValue}"`);
-      }
-  
-      const entityRef = `${matchingEntity.kind.toLowerCase()}:${matchingEntity.metadata.namespace || 'default'}/${matchingEntity.metadata.name}`;
-  
-      ctx.logger.info(`✅ Resolved: ${entityRef}`);
-  
-      // Output the results
-      ctx.output('entity', matchingEntity);
-      ctx.output('entityRef', entityRef);
-      ctx.output('metadata', matchingEntity.metadata);
-      ctx.output('spec', matchingEntity.spec || {});
-  
-    } catch (error) {
-      ctx.logger.error(`Failed to resolve entity: ${error}`);
-      throw error;
-    }
-  }
