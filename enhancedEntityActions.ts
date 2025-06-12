@@ -2,8 +2,9 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 import { CatalogClient } from "@backstage/catalog-client";
+import fetch from "node-fetch";
 
-// FIXED: The full entity resolution action with proper authentication
+// FIXED: The full entity resolution action with proper fetch handling
 export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
   const { discovery } = options;
 
@@ -71,10 +72,10 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
           `Resolving entity: "${displayValue}" with template: "${displayTemplate}"`
         );
 
-        // FIXED: Create catalog client with proper authentication from context
+        // FIXED: Create catalog client with imported node-fetch
         const catalogApi = new CatalogClient({
           discoveryApi: discovery,
-          fetchApi: ctx, // Use the authenticated fetch from context
+          fetchApi: { fetch },
         });
 
         // Build filter for entity search
@@ -316,10 +317,10 @@ export const extractEntityRefAction = (options: { discovery: any }) => {
       try {
         ctx.logger.info(`Extracting entity reference from: "${displayValue}"`);
 
-        // FIXED: Use the same catalog search approach as resolveEntity
+        // FIXED: Use the same approach as resolveEntity
         const catalogApi = new CatalogClient({
           discoveryApi: discovery,
-          fetchApi: ctx, // Use authenticated fetch from context
+          fetchApi: { fetch },
         });
 
         // Build filter
