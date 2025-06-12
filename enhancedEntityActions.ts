@@ -2,16 +2,17 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 
-// Generic action to resolve ANY entity from display format
-export const resolveEntityFromDisplayAction = () => {
+// Simple action that extracts entityRef from display format
+export const extractEntityRefAction = () => {
   return createTemplateAction<{
     displayValue: string;
     displayTemplate: string;
-    catalogFilter?: any;
+    entityKind?: string;
+    entityNamespace?: string;
   }>({
-    id: "enhanced:resolveEntity",
+    id: "enhanced:extractEntityRef",
     description:
-      "Resolve entity data from EnhancedEntityPicker display format - works with ANY entity type",
+      "Extract entity reference from display format for use with catalog:fetch",
     schema: {
       input: {
         type: "object",
@@ -27,142 +28,91 @@ export const resolveEntityFromDisplayAction = () => {
             title: "Display Template",
             description: "Template used to format the display",
           },
-          catalogFilter: {
-            type: "object",
-            title: "Catalog Filter",
-            description: "Filter to narrow down entity search",
+          entityKind: {
+            type: "string",
+            title: "Entity Kind",
+            description: "Expected entity kind (User, Component, etc.)",
+            default: "User",
+          },
+          entityNamespace: {
+            type: "string",
+            title: "Entity Namespace",
+            description: "Expected entity namespace",
+            default: "default",
           },
         },
       },
       output: {
         type: "object",
         properties: {
-          entity: {
-            type: "object",
-            title: "Complete Entity",
-            description: "Full entity object with ALL properties",
-          },
           entityRef: {
             type: "string",
             title: "Entity Reference",
-            description: "Entity reference string",
+            description: "Entity reference for use with catalog:fetch",
           },
-          metadata: {
-            type: "object",
-            title: "Entity Metadata",
-            description: "Entity metadata for quick access",
-          },
-          spec: {
-            type: "object",
-            title: "Entity Spec",
-            description: "Entity spec for quick access",
+          extractedName: {
+            type: "string",
+            title: "Extracted Name",
+            description: "Extracted entity name",
           },
         },
       },
     },
     async handler(ctx) {
-      const { displayValue, displayTemplate, catalogFilter = {} } = ctx.input;
+      const {
+        displayValue,
+        displayTemplate,
+        entityKind = "User",
+        entityNamespace = "default",
+      } = ctx.input;
 
       try {
-        // Use the catalog API that's available in the scaffolder context
-        // This should be properly authenticated
-        const catalogApi = ctx.catalogApi;
+        ctx.logger.info(`Extracting entity reference from: "${displayValue}"`);
+        ctx.logger.info(`Using template: "${displayTemplate}"`);
 
-        if (!catalogApi) {
-          throw new Error("Catalog API not available in scaffolder context");
+        // Parse different display template patterns
+        let extractedName = "";
+
+        // Pattern 1: "Name [Kind]" -> extract Name
+        const kindBracketMatch = displayValue.match(/^(.+?)\s*\[.+\]$/);
+        if (kindBracketMatch) {
+          extractedName = kindBracketMatch[1].trim();
         }
-
-        ctx.logger.info(
-          `Resolving entity: "${displayValue}" with template: "${displayTemplate}"`
-        );
-
-        // Build filter for entity search
-        const filter: any = {};
-        if (catalogFilter.kind) {
-          filter.kind = catalogFilter.kind;
-        }
-        if (catalogFilter.type) {
-          filter["spec.type"] = catalogFilter.type;
-        }
-
-        // Add any additional filters
-        Object.keys(catalogFilter).forEach((key) => {
-          if (key !== "kind" && key !== "type") {
-            filter[key] = catalogFilter[key];
+        // Pattern 2: "Name (email)" -> extract Name
+        else if (displayValue.includes("(") && displayValue.includes(")")) {
+          const emailParenMatch = displayValue.match(/^(.+?)\s*\(/);
+          if (emailParenMatch) {
+            extractedName = emailParenMatch[1].trim();
           }
-        });
+        }
+        // Pattern 3: Just the name
+        else {
+          extractedName = displayValue.trim();
+        }
 
-        ctx.logger.info(`Using catalog filter: ${JSON.stringify(filter)}`);
-
-        // Fetch entities using the authenticated catalog API
-        const response = await catalogApi.getEntities({ filter });
-
-        ctx.logger.info(`Found ${response.items.length} entities in catalog`);
-
-        // Generic function to format entity display (same logic as component)
-        const formatEntityDisplay = (template: string, entity: any): string => {
-          return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-            const trimmedPath = path.trim();
-            const value = trimmedPath
-              .split(".")
-              .reduce((obj: any, key: string) => {
-                return obj && obj[key] !== undefined ? obj[key] : "";
-              }, entity);
-            return value || "";
-          });
-        };
-
-        // Find entity that matches the display value
-        const matchingEntity = response.items.find((entity) => {
-          const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
-          const matches = formattedDisplay === displayValue;
-          if (matches) {
-            ctx.logger.info(
-              `Found matching entity: ${entity.kind}:${entity.metadata.namespace}/${entity.metadata.name}`
-            );
-          }
-          return matches;
-        });
-
-        if (!matchingEntity) {
-          ctx.logger.error(
-            `Could not find entity matching display value: "${displayValue}"`
-          );
-          ctx.logger.info(`Template used: "${displayTemplate}"`);
-          ctx.logger.info(`Available entities (first 10):`);
-
-          response.items.slice(0, 10).forEach((entity) => {
-            const formatted = formatEntityDisplay(displayTemplate, entity);
-            ctx.logger.info(
-              `  - Formatted: "${formatted}" | Entity: ${entity.kind}:${entity.metadata.namespace}/${entity.metadata.name}`
-            );
-          });
-
+        if (!extractedName) {
           throw new Error(
-            `Could not find entity matching display value: "${displayValue}". Found ${response.items.length} total entities.`
+            `Could not extract entity name from display value: "${displayValue}"`
           );
         }
 
-        const entityRef = `${matchingEntity.kind.toLowerCase()}:${
-          matchingEntity.metadata.namespace || "default"
-        }/${matchingEntity.metadata.name}`;
+        // Convert name to entity reference format
+        // Handle names with dots, spaces, etc.
+        const entityName = extractedName
+          .toLowerCase()
+          .replace(/\s+/g, ".") // spaces to dots
+          .replace(/[^a-z0-9.\-_]/g, ""); // remove special chars
 
-        ctx.logger.info(`✅ Successfully resolved entity: ${entityRef}`);
+        const entityRef = `${entityKind.toLowerCase()}:${entityNamespace}/${entityName}`;
 
-        // Output the results
-        ctx.output("entity", matchingEntity);
+        ctx.logger.info(`✅ Extracted entity reference: ${entityRef}`);
+
         ctx.output("entityRef", entityRef);
-        ctx.output("metadata", matchingEntity.metadata);
-        ctx.output("spec", matchingEntity.spec || {});
+        ctx.output("extractedName", extractedName);
       } catch (error) {
-        ctx.logger.error(`Error resolving entity: ${error}`);
-        ctx.logger.error(
-          `Stack trace: ${
-            error instanceof Error ? error.stack : "No stack trace"
-          }`
-        );
+        ctx.logger.error(`Error extracting entity reference: ${error}`);
         throw new Error(
-          `Failed to resolve entity: ${
+          `Failed to extract entity reference: ${
             error instanceof Error ? error.message : "Unknown error"
           }`
         );
@@ -171,95 +121,82 @@ export const resolveEntityFromDisplayAction = () => {
   });
 };
 
-// Debug action to show available entity properties
-export const debugEntityPropertiesAction = () => {
+// Alternative: Parse email from display format
+export const extractEmailFromDisplayAction = () => {
   return createTemplateAction<{
-    entity: any;
+    displayValue: string;
   }>({
-    id: "enhanced:debugEntity",
-    description: "Debug action to show all available properties of an entity",
+    id: "enhanced:extractEmail",
+    description:
+      'Extract email and name from display format like "Name (email@domain.com)"',
     schema: {
       input: {
         type: "object",
-        required: ["entity"],
+        required: ["displayValue"],
         properties: {
-          entity: {
-            type: "object",
-            title: "Entity",
-            description: "Entity object to debug",
+          displayValue: {
+            type: "string",
+            title: "Display Value",
+            description: "Display value containing email in parentheses",
+          },
+        },
+      },
+      output: {
+        type: "object",
+        properties: {
+          email: {
+            type: "string",
+            title: "Extracted Email",
+          },
+          name: {
+            type: "string",
+            title: "Extracted Name",
+          },
+          entityRef: {
+            type: "string",
+            title: "Entity Reference",
+            description: "Guessed entity reference based on email",
           },
         },
       },
     },
     async handler(ctx) {
-      const { entity } = ctx.input;
-
-      if (!entity || typeof entity !== "object") {
-        ctx.logger.error("Invalid entity provided for debugging");
-        return;
-      }
-
-      const getObjectStructure = (
-        obj: any,
-        prefix = "",
-        maxDepth = 3,
-        currentDepth = 0
-      ): string[] => {
-        if (!obj || typeof obj !== "object" || currentDepth >= maxDepth)
-          return [];
-
-        const keys: string[] = [];
-        Object.keys(obj).forEach((key) => {
-          const fullKey = prefix ? `${prefix}.${key}` : key;
-          keys.push(fullKey);
-
-          if (
-            typeof obj[key] === "object" &&
-            obj[key] !== null &&
-            !Array.isArray(obj[key])
-          ) {
-            keys.push(
-              ...getObjectStructure(
-                obj[key],
-                fullKey,
-                maxDepth,
-                currentDepth + 1
-              )
-            );
-          }
-        });
-        return keys;
-      };
+      const { displayValue } = ctx.input;
 
       try {
-        const availableProperties = getObjectStructure(entity);
+        ctx.logger.info(`Extracting email from: "${displayValue}"`);
 
-        ctx.logger.info(
-          `🔍 ENTITY DEBUG - ${entity.kind}:${
-            entity.metadata?.namespace || "default"
-          }/${entity.metadata?.name}`
-        );
-        ctx.logger.info(
-          `📋 Available properties (${availableProperties.length}):`
-        );
+        // Parse format like "john.doe.ffno_unitedhealth.com ( john.doe.ffno@unitedhealth.com)"
+        const emailMatch = displayValue.match(/\(([^)]+)\)/);
+        const nameMatch = displayValue.match(/^([^(]+)/);
 
-        availableProperties.slice(0, 50).forEach((prop) => {
-          ctx.logger.info(`   - ${prop}`);
-        });
+        const email = emailMatch ? emailMatch[1].trim() : "";
+        const name = nameMatch ? nameMatch[1].trim() : "";
 
-        if (availableProperties.length > 50) {
-          ctx.logger.info(
-            `   ... and ${availableProperties.length - 50} more properties`
-          );
+        // Guess entity reference from email
+        let entityRef = "";
+        if (email) {
+          const emailUsername = email.split("@")[0];
+          entityRef = `user:default/${emailUsername}`;
+        } else if (name) {
+          const cleanName = name.toLowerCase().replace(/\s+/g, ".");
+          entityRef = `user:default/${cleanName}`;
         }
 
-        if (availableProperties.length > 0) {
-          ctx.logger.info(
-            `\n💡 Access properties in templates using: $\{{ steps['step-name'].output.entity.${availableProperties[0]} }}`
-          );
-        }
+        ctx.logger.info(
+          `✅ Extracted - Name: "${name}", Email: "${email}", EntityRef: "${entityRef}"`
+        );
+
+        ctx.output("email", email);
+        ctx.output("name", name);
+        ctx.output("entityRef", entityRef);
       } catch (error) {
-        ctx.logger.error(`Error debugging entity: ${error}`);
+        ctx.logger.error(`Error extracting email: ${error}`);
+        throw new Error(
+          `Failed to extract email: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
       }
     },
   });
