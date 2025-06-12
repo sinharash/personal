@@ -2,9 +2,8 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 import { CatalogClient } from "@backstage/catalog-client";
-import fetch from "node-fetch";
 
-// FIXED: The full entity resolution action with proper fetch handling
+// FIXED: The full entity resolution action with proper Backstage patterns
 export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
   const { discovery } = options;
 
@@ -72,10 +71,10 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
           `Resolving entity: "${displayValue}" with template: "${displayTemplate}"`
         );
 
-        // FIXED: Create catalog client with imported node-fetch
+        // SIMPLE FIX: Use CatalogClient with discovery only
+        // Many Backstage setups work without explicit fetchApi
         const catalogApi = new CatalogClient({
           discoveryApi: discovery,
-          fetchApi: { fetch },
         });
 
         // Build filter for entity search
@@ -317,10 +316,9 @@ export const extractEntityRefAction = (options: { discovery: any }) => {
       try {
         ctx.logger.info(`Extracting entity reference from: "${displayValue}"`);
 
-        // FIXED: Use the same approach as resolveEntity
+        // SIMPLE FIX: Use CatalogClient with discovery only
         const catalogApi = new CatalogClient({
           discoveryApi: discovery,
-          fetchApi: { fetch },
         });
 
         // Build filter
