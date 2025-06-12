@@ -6,13 +6,7 @@ import {
 } from "@backstage/backend-plugin-api";
 import { scaffolderActionsExtensionPoint } from "@backstage/plugin-scaffolder-node/alpha";
 import { dataAuroraClusterCreateAction } from "./actions/dataAuroraClusterCreate";
-import {
-  resolveEntityFromDisplayAction,
-  resolveEntityUsingCatalogFetchAction,
-  debugEntityPropertiesAction,
-  extractEntityRefAction,
-  extractEmailFromDisplayAction,
-} from "./actions/enhancedEntityActions";
+import { resolveEntityFromDisplayAction } from "./actions/enhancedEntityActions";
 
 const cloudExperienceScaffolderModule = createBackendModule({
   moduleId: "cloud-experience",
@@ -30,13 +24,9 @@ const cloudExperienceScaffolderModule = createBackendModule({
           dataAuroraClusterCreateAction({ config, discovery })
         );
 
-        // Register the enhanced entity picker actions with extensive debugging
+        // Register the simplified enhanced entity picker action
         scaffolder.addActions(
-          resolveEntityFromDisplayAction({ discovery }), // Original with debug logs
-          resolveEntityUsingCatalogFetchAction(), // Alternative approach
-          debugEntityPropertiesAction(),
-          extractEntityRefAction(), // Simplified without HTTP calls
-          extractEmailFromDisplayAction()
+          resolveEntityFromDisplayAction() // No dependencies needed
         );
       },
     });

@@ -1,22 +1,22 @@
-# Debug YAML - Extensive logging to troubleshoot 401 issues
+# Simple 2-Step YAML - Extract reference + Fetch entity
 
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: working-enhanced-entity-picker-debug
-  title: Working Enhanced Entity Picker - DEBUG VERSION
-  description: Extensive logging to troubleshoot authentication issues
+  name: simple-enhanced-entity-picker
+  title: Simple Enhanced Entity Picker
+  description: 2-step approach - extract reference then fetch entity
 spec:
   owner: platform-team
   type: test
 
   parameters:
-    - title: Test Entity Selection
+    - title: Select Entity
       required:
-        - testEntity
+        - selectedEntity
       properties:
-        testEntity:
-          title: Select Any Entity
+        selectedEntity:
+          title: Choose User
           type: string
           ui:field: EnhancedEntityPicker
           ui:options:
@@ -25,71 +25,41 @@ spec:
               kind: User
 
   steps:
-    - id: show-display-value
-      name: Show Display Value
-      action: debug:log
-      input:
-        message: |
-          📋 SELECTED ENTITY:
-          Display Value: ${{ parameters.testEntity }}
-
-          🔍 About to attempt entity resolution...
-          This will show detailed logs about the HTTP request and response.
-
-    # DEBUG VERSION: This will show extensive logs
-    - id: resolve-entity-debug
-      name: Resolve Entity Data (Debug)
+    # STEP 1: Extract entity reference from display value (no HTTP calls)
+    - id: extract-reference
+      name: Extract Entity Reference
       action: enhanced:resolveEntity
       input:
-        displayValue: ${{ parameters.testEntity }}
+        displayValue: ${{ parameters.selectedEntity }}
         displayTemplate: "${{ metadata.title }} - ${{ spec.profile.department }}"
-        catalogFilter:
-          kind: User
+        entityKind: "User"
+        entityNamespace: "default"
 
-    - id: show-resolved-data
-      name: Show Resolved Data
+    # STEP 2: Use built-in catalog:fetch to get full entity data (has proper auth)
+    - id: fetch-entity
+      name: Fetch Entity Data
+      action: catalog:fetch
+      input:
+        entityRef: ${{ steps['extract-reference'].output.entityRef }}
+
+    # RESULT: Show that we have full entity access
+    - id: show-result
+      name: Show Result
       action: debug:log
       input:
         message: |
-          🎯 RESOLVED ENTITY DATA:
+          ✅ SUCCESS! Enhanced Entity Picker Working:
 
-          Display: ${{ parameters.testEntity }}
-          EntityRef: ${{ steps['resolve-entity-debug'].output.entityRef }}
+          👤 User Selected: ${{ parameters.selectedEntity }}
+          🔗 Entity Reference: ${{ steps['extract-reference'].output.entityRef }}
 
-          Full Entity Details:
-          - Kind: ${{ steps['resolve-entity-debug'].output.entity.kind }}
-          - Name: ${{ steps['resolve-entity-debug'].output.entity.metadata.name }}
-          - Title: ${{ steps['resolve-entity-debug'].output.entity.metadata.title }}
-          - Department: ${{ steps['resolve-entity-debug'].output.entity.spec.profile.department }}
-          - Email: ${{ steps['resolve-entity-debug'].output.entity.spec.profile.email || 'N/A' }}
-          - Description: ${{ steps['resolve-entity-debug'].output.entity.metadata.description || 'N/A' }}
+          📋 Full Entity Data Available:
+          - Name: ${{ steps['fetch-entity'].output.entity.metadata.name }}
+          - Title: ${{ steps['fetch-entity'].output.entity.metadata.title || 'N/A' }}
+          - Department: ${{ steps['fetch-entity'].output.entity.spec.profile.department || 'N/A' }}
+          - Email: ${{ steps['fetch-entity'].output.entity.spec.profile.email || 'N/A' }}
 
-          ✅ SUCCESS! Debugging approach worked!
-
-    - id: debug-entity-properties
-      name: Debug Entity Properties
-      action: enhanced:debugEntity
-      input:
-        entity: ${{ steps['resolve-entity-debug'].output.entity }}
-
-    - id: create-test-file
-      name: Create Test File
-      action: fs:write
-      input:
-        path: ./entity-data-debug.json
-        content: |
-          {
-            "test": "enhanced-entity-picker-debug",
-            "userSelection": {
-              "displayValue": "${{ parameters.testEntity }}",
-              "resolvedEntityRef": "${{ steps['resolve-entity-debug'].output.entityRef }}"
-            },
-            "resolvedEntity": {
-              "kind": "${{ steps['resolve-entity-debug'].output.entity.kind }}",
-              "name": "${{ steps['resolve-entity-debug'].output.entity.metadata.name }}",
-              "title": "${{ steps['resolve-entity-debug'].output.entity.metadata.title }}",
-              "department": "${{ steps['resolve-entity-debug'].output.entity.spec.profile.department }}",
-              "email": "${{ steps['resolve-entity-debug'].output.entity.spec.profile.email || null }}"
-            },
-            "status": "success - debug version worked!"
-          }
+          🎯 Perfect! You now have:
+          1. Clean user experience (they see: "${{ parameters.selectedEntity }}")
+          2. Full programmatic access to entity data
+          3. No authentication issues
