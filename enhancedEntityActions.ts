@@ -91,9 +91,18 @@ export const resolveEntityFromDisplayAction = () => {
           );
         }
 
-        // Extract entity kind from catalogFilter
-        const entityKind = catalogFilter.kind || "Component";
-        ctx.logger.info(`🔍 Entity kind from filter: ${entityKind}`);
+        // Extract entity kind from catalogFilter (REQUIRED - not hardcoded)
+        const entityKind = catalogFilter.kind;
+
+        if (!entityKind) {
+          throw new Error(
+            `Entity kind is required but not found in catalogFilter. ` +
+              `Received catalogFilter: ${JSON.stringify(catalogFilter)}. ` +
+              `Make sure your EnhancedEntityPicker has catalogFilter.kind specified.`
+          );
+        }
+
+        ctx.logger.info(`🔍 Entity kind from catalogFilter: ${entityKind}`);
 
         // Parse the template to extract variable positions
         const parseTemplate = (template: string, value: string) => {

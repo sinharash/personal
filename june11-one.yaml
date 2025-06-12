@@ -35,7 +35,7 @@ spec:
         # MUST match exactly what's in ui:options above AND include metadata.name
         displayTemplate: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
         catalogFilter:
-          kind: User
+          kind: User # CRITICAL: This determines the entity kind for the reference
         entityNamespace: "default"
 
     # STEP 2: Use built-in catalog:fetch with REAL entity name (guaranteed to work)
@@ -69,4 +69,7 @@ spec:
 
           🎉 Perfect! Using REAL entity names (metadata.name), not guessed ones!
 
-          ⚠️ Developer Note: Your template MUST include metadata.name for this to work!
+          ⚠️ Developer Notes:
+          1. Template MUST include metadata.name for this to work
+          2. catalogFilter.kind determines the entity kind dynamically  
+          3. Works with any entity kind (User, Component, Group, etc.)
