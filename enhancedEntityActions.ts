@@ -2,11 +2,9 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 
-// FIXED: The full entity resolution action using proper service injection
-export const resolveEntityFromDisplayAction = (options: {
-  catalogApi: any;
-}) => {
-  const { catalogApi } = options;
+// FIXED: The full entity resolution action using direct discovery API calls
+export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
+  const { discovery } = options;
 
   return createTemplateAction<{
     displayValue: string;
@@ -88,11 +86,77 @@ export const resolveEntityFromDisplayAction = (options: {
           }
         });
 
-        ctx.logger.info(`Using catalog filter: ${JSON.stringify(filter)}`);
+        // FIXED: Use discovery API directly with proper fetch handling
+        const catalogBaseUrl = await discovery.getBaseUrl("catalog");
 
-        // FIXED: Use the injected catalog service directly
-        const response = await catalogApi.getEntities({ filter });
-        ctx.logger.info(`Found ${response.items.length} entities in catalog`);
+        // Build query parameters for the catalog API
+        const queryParams = new URLSearchParams();
+        if (catalogFilter.kind) {
+          queryParams.append("filter", `kind=${catalogFilter.kind}`);
+        }
+        if (catalogFilter.type) {
+          queryParams.append("filter", `spec.type=${catalogFilter.type}`);
+        }
+
+        // Add any additional filters
+        Object.keys(catalogFilter).forEach((key) => {
+          if (key !== "kind" && key !== "type") {
+            queryParams.append("filter", `${key}=${catalogFilter[key]}`);
+          }
+        });
+
+        const catalogUrl = `${catalogBaseUrl}/entities?${queryParams.toString()}`;
+
+        ctx.logger.info(`Fetching entities from: ${catalogUrl}`);
+
+        // Make direct HTTP call using Node.js built-in modules to avoid fetch issues
+        const https = require("https");
+        const http = require("http");
+        const { URL } = require("url");
+
+        const fetchEntities = (): Promise<any> => {
+          return new Promise((resolve, reject) => {
+            const parsedUrl = new URL(catalogUrl);
+            const client = parsedUrl.protocol === "https:" ? https : http;
+
+            const options = {
+              hostname: parsedUrl.hostname,
+              port: parsedUrl.port,
+              path: parsedUrl.pathname + parsedUrl.search,
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            };
+
+            const req = client.request(options, (res: any) => {
+              let data = "";
+              res.on("data", (chunk: any) => (data += chunk));
+              res.on("end", () => {
+                try {
+                  if (res.statusCode >= 400) {
+                    reject(
+                      new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`)
+                    );
+                    return;
+                  }
+                  const parsed = JSON.parse(data);
+                  resolve(parsed);
+                } catch (err) {
+                  reject(err);
+                }
+              });
+            });
+
+            req.on("error", reject);
+            req.end();
+          });
+        };
+
+        const catalogData = await fetchEntities();
+        const entities = catalogData.items || [];
+
+        ctx.logger.info(`Found ${entities.length} entities in catalog`);
 
         // Generic function to format entity display (same logic as component)
         const formatEntityDisplay = (template: string, entity: any): string => {
@@ -108,7 +172,7 @@ export const resolveEntityFromDisplayAction = (options: {
         };
 
         // Find entity that matches the display value
-        const matchingEntity = response.items.find((entity) => {
+        const matchingEntity = entities.find((entity) => {
           const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
           const matches = formattedDisplay === displayValue;
           if (matches) {
@@ -126,7 +190,7 @@ export const resolveEntityFromDisplayAction = (options: {
           ctx.logger.info(`Template used: "${displayTemplate}"`);
           ctx.logger.info(`Available entities (first 10):`);
 
-          response.items.slice(0, 10).forEach((entity) => {
+          entities.slice(0, 10).forEach((entity) => {
             const formatted = formatEntityDisplay(displayTemplate, entity);
             ctx.logger.info(
               `  - Formatted: "${formatted}" | Entity: ${entity.kind}:${entity.metadata.namespace}/${entity.metadata.name}`
@@ -134,7 +198,7 @@ export const resolveEntityFromDisplayAction = (options: {
           });
 
           throw new Error(
-            `Could not find entity matching display value: "${displayValue}". Found ${response.items.length} total entities.`
+            `Could not find entity matching display value: "${displayValue}". Found ${entities.length} total entities.`
           );
         }
 
@@ -256,8 +320,8 @@ export const debugEntityPropertiesAction = () => {
 };
 
 // Simple action that extracts entityRef from display format - ALSO FIXED
-export const extractEntityRefAction = (options: { catalogApi: any }) => {
-  const { catalogApi } = options;
+export const extractEntityRefAction = (options: { discovery: any }) => {
+  const { discovery } = options;
 
   return createTemplateAction<{
     displayValue: string;
@@ -311,23 +375,71 @@ export const extractEntityRefAction = (options: { catalogApi: any }) => {
       try {
         ctx.logger.info(`Extracting entity reference from: "${displayValue}"`);
 
-        // Build filter
-        const filter: any = {};
+        // FIXED: Use discovery API directly like resolveEntity with Node.js HTTP
+        const catalogBaseUrl = await discovery.getBaseUrl("catalog");
+
+        const queryParams = new URLSearchParams();
         if (catalogFilter.kind) {
-          filter.kind = catalogFilter.kind;
+          queryParams.append("filter", `kind=${catalogFilter.kind}`);
         }
         if (catalogFilter.type) {
-          filter["spec.type"] = catalogFilter.type;
+          queryParams.append("filter", `spec.type=${catalogFilter.type}`);
         }
 
         Object.keys(catalogFilter).forEach((key) => {
           if (key !== "kind" && key !== "type") {
-            filter[key] = catalogFilter[key];
+            queryParams.append("filter", `${key}=${catalogFilter[key]}`);
           }
         });
 
-        // FIXED: Use the injected catalog service directly
-        const response = await catalogApi.getEntities({ filter });
+        const catalogUrl = `${catalogBaseUrl}/entities?${queryParams.toString()}`;
+
+        // Make direct HTTP call using Node.js built-in modules
+        const https = require("https");
+        const http = require("http");
+        const { URL } = require("url");
+
+        const fetchEntities = (): Promise<any> => {
+          return new Promise((resolve, reject) => {
+            const parsedUrl = new URL(catalogUrl);
+            const client = parsedUrl.protocol === "https:" ? https : http;
+
+            const options = {
+              hostname: parsedUrl.hostname,
+              port: parsedUrl.port,
+              path: parsedUrl.pathname + parsedUrl.search,
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            };
+
+            const req = client.request(options, (res: any) => {
+              let data = "";
+              res.on("data", (chunk: any) => (data += chunk));
+              res.on("end", () => {
+                try {
+                  if (res.statusCode >= 400) {
+                    reject(
+                      new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`)
+                    );
+                    return;
+                  }
+                  const parsed = JSON.parse(data);
+                  resolve(parsed);
+                } catch (err) {
+                  reject(err);
+                }
+              });
+            });
+
+            req.on("error", reject);
+            req.end();
+          });
+        };
+
+        const catalogData = await fetchEntities();
+        const entities = catalogData.items || [];
 
         const formatEntityDisplay = (template: string, entity: any): string => {
           return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
@@ -341,7 +453,7 @@ export const extractEntityRefAction = (options: { catalogApi: any }) => {
           });
         };
 
-        const matchingEntity = response.items.find((entity) => {
+        const matchingEntity = entities.find((entity) => {
           const formattedDisplay = formatEntityDisplay(displayTemplate, entity);
           return formattedDisplay === displayValue;
         });
