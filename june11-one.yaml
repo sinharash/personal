@@ -33,7 +33,7 @@ spec:
       input:
         displayValue: ${{ parameters.selectedEntity }}
         # MUST match exactly what's in ui:options above AND include metadata.name
-        displayTemplate: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
+        displayTemplate: "{% raw %}${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}{% endraw %}"
         catalogFilter:
           kind: User # CRITICAL: This determines the entity kind for the reference
         entityNamespace: "default"
