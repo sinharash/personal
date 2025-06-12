@@ -1,11 +1,11 @@
-# Working Template - No Auth Issues!
+# Fixed YAML - Use enhanced:resolveEntity instead of extraction
 
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: working-enhanced-entity-picker
-  title: Working Enhanced Entity Picker
-  description: Uses simple actions + built-in catalog:fetch
+  name: working-enhanced-entity-picker-fixed
+  title: Working Enhanced Entity Picker - FIXED
+  description: Uses enhanced:resolveEntity action for composite display formats
 spec:
   owner: platform-team
   type: test
@@ -20,7 +20,7 @@ spec:
           type: string
           ui:field: EnhancedEntityPicker
           ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.name }} [${{ kind }}]"
+            displayEntityFieldAfterFormatting: "${{ metadata.title }} - ${{ spec.profile.department }}"
             catalogFilter:
               kind: User
 
@@ -33,68 +33,41 @@ spec:
           📋 SELECTED ENTITY:
           Display Value: ${{ parameters.testEntity }}
 
-    # Step 1: Extract entity reference from display format (no catalog access needed)
-    - id: extract-entity-ref
-      name: Extract Entity Reference
-      action: enhanced:extractEntityRef
+    # FIXED: Use enhanced:resolveEntity with MATCHING template
+    - id: resolve-entity
+      name: Resolve Entity Data
+      action: enhanced:resolveEntity
       input:
         displayValue: ${{ parameters.testEntity }}
-        displayTemplate: "${{ metadata.name }} [${{ kind }}]"
-        entityKind: "User"
-        entityNamespace: "default"
+        displayTemplate: "${{ metadata.title }} - ${{ spec.profile.department }}"
+        catalogFilter:
+          kind: User
 
-    - id: show-extracted-ref
-      name: Show Extracted Reference
+    - id: show-resolved-data
+      name: Show Resolved Data
       action: debug:log
       input:
         message: |
-          🔍 EXTRACTED:
-          Entity Ref: ${{ steps['extract-entity-ref'].output.entityRef }}
-          Entity Name: ${{ steps['extract-entity-ref'].output.extractedName }}
-
-    # Step 2: Use built-in catalog:fetch (guaranteed to work with auth)
-    - id: fetch-entity-data
-      name: Fetch Entity Data
-      action: catalog:fetch
-      input:
-        entityRef: ${{ steps['extract-entity-ref'].output.entityRef }}
-
-    - id: show-full-entity-data
-      name: Show Full Entity Data
-      action: debug:log
-      input:
-        message: |
-          🎯 COMPLETE ENTITY DATA:
+          🎯 RESOLVED ENTITY DATA:
 
           Display: ${{ parameters.testEntity }}
-          EntityRef: ${{ steps['extract-entity-ref'].output.entityRef }}
+          EntityRef: ${{ steps['resolve-entity'].output.entityRef }}
 
           Full Entity Details:
-          - Kind: ${{ steps['fetch-entity-data'].output.entity.kind }}
-          - Name: ${{ steps['fetch-entity-data'].output.entity.metadata.name }}
-          - Namespace: ${{ steps['fetch-entity-data'].output.entity.metadata.namespace }}
-          - Email: ${{ steps['fetch-entity-data'].output.entity.spec.profile.email || 'N/A' }}
-          - Department: ${{ steps['fetch-entity-data'].output.entity.spec.profile.department || 'N/A' }}
-          - Description: ${{ steps['fetch-entity-data'].output.entity.metadata.description || 'N/A' }}
+          - Kind: ${{ steps['resolve-entity'].output.entity.kind }}
+          - Name: ${{ steps['resolve-entity'].output.entity.metadata.name }}
+          - Title: ${{ steps['resolve-entity'].output.entity.metadata.title }}
+          - Department: ${{ steps['resolve-entity'].output.entity.spec.profile.department }}
+          - Email: ${{ steps['resolve-entity'].output.entity.spec.profile.email || 'N/A' }}
+          - Description: ${{ steps['resolve-entity'].output.entity.metadata.description || 'N/A' }}
 
-          🎉 SUCCESS! No auth issues!
+          ✅ SUCCESS! Found the exact entity by matching display format!
 
-    # Alternative: Extract email directly (if display format contains email)
-    - id: extract-email
-      name: Extract Email from Display
-      action: enhanced:extractEmail
+    - id: debug-entity-properties
+      name: Debug Entity Properties
+      action: enhanced:debugEntity
       input:
-        displayValue: ${{ parameters.testEntity }}
-
-    - id: show-extracted-email
-      name: Show Extracted Email
-      action: debug:log
-      input:
-        message: |
-          📧 EMAIL EXTRACTION:
-          Name: ${{ steps['extract-email'].output.name }}
-          Email: ${{ steps['extract-email'].output.email }}
-          Guessed EntityRef: ${{ steps['extract-email'].output.entityRef }}
+        entity: ${{ steps['resolve-entity'].output.entity }}
 
     - id: create-test-file
       name: Create Test File
@@ -103,22 +76,17 @@ spec:
         path: ./entity-data.json
         content: |
           {
-            "test": "enhanced-entity-picker-working",
+            "test": "enhanced-entity-picker-fixed",
             "userSelection": {
               "displayValue": "${{ parameters.testEntity }}",
-              "extractedEntityRef": "${{ steps['extract-entity-ref'].output.entityRef }}",
-              "extractedName": "${{ steps['extract-entity-ref'].output.extractedName }}"
+              "resolvedEntityRef": "${{ steps['resolve-entity'].output.entityRef }}"
             },
             "resolvedEntity": {
-              "kind": "${{ steps['fetch-entity-data'].output.entity.kind }}",
-              "name": "${{ steps['fetch-entity-data'].output.entity.metadata.name }}",
-              "namespace": "${{ steps['fetch-entity-data'].output.entity.metadata.namespace }}",
-              "email": "${{ steps['fetch-entity-data'].output.entity.spec.profile.email || null }}",
-              "department": "${{ steps['fetch-entity-data'].output.entity.spec.profile.department || null }}"
+              "kind": "${{ steps['resolve-entity'].output.entity.kind }}",
+              "name": "${{ steps['resolve-entity'].output.entity.metadata.name }}",
+              "title": "${{ steps['resolve-entity'].output.entity.metadata.title }}",
+              "department": "${{ steps['resolve-entity'].output.entity.spec.profile.department }}",
+              "email": "${{ steps['resolve-entity'].output.entity.spec.profile.email || null }}"
             },
-            "emailExtraction": {
-              "name": "${{ steps['extract-email'].output.name }}",
-              "email": "${{ steps['extract-email'].output.email }}"
-            },
-            "status": "success - no auth issues!"
+            "status": "success - proper entity resolution!"
           }
