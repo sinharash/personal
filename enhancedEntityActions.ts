@@ -2,17 +2,16 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 
-// SINGLE ACTION: Extract entity reference from display value (NO HTTP CALLS)
+// SINGLE ACTION: Extract entity reference using template parsing with metadata.name requirement
 export const resolveEntityFromDisplayAction = () => {
   return createTemplateAction<{
     displayValue: string;
     displayTemplate: string;
-    entityKind?: string;
+    catalogFilter?: any;
     entityNamespace?: string;
   }>({
     id: "enhanced:resolveEntity",
-    description:
-      "Extract entity reference from display format for catalog:fetch",
+    description: "Extract entity reference from display format (requires metadata.name in template)",
     schema: {
       input: {
         type: "object",
@@ -26,13 +25,12 @@ export const resolveEntityFromDisplayAction = () => {
           displayTemplate: {
             type: "string",
             title: "Display Template",
-            description: "Template used to format the display",
+            description: "Template used to format the display (must include metadata.name)",
           },
-          entityKind: {
-            type: "string",
-            title: "Entity Kind",
-            description: "Expected entity kind (User, Component, etc.)",
-            default: "User",
+          catalogFilter: {
+            type: "object",
+            title: "Catalog Filter", 
+            description: "Filter from EnhancedEntityPicker (contains entity kind)",
           },
           entityNamespace: {
             type: "string",
@@ -53,7 +51,17 @@ export const resolveEntityFromDisplayAction = () => {
           extractedName: {
             type: "string",
             title: "Extracted Name",
-            description: "Extracted entity name",
+            description: "Extracted entity name (metadata.name)",
+          },
+          parsedValues: {
+            type: "object",
+            title: "Parsed Values",
+            description: "All values extracted from the template",
+          },
+          entityKind: {
+            type: "string",
+            title: "Entity Kind",
+            description: "Extracted entity kind from catalogFilter",
           },
         },
       },
@@ -62,52 +70,96 @@ export const resolveEntityFromDisplayAction = () => {
       const {
         displayValue,
         displayTemplate,
-        entityKind = "User",
+        catalogFilter = {},
         entityNamespace = "default",
       } = ctx.input;
 
       try {
-        ctx.logger.info(
-          `🔧 Extracting entity reference from: "${displayValue}"`
-        );
+        ctx.logger.info(`🔧 Parsing display value: "${displayValue}"`);
+        ctx.logger.info(`🔧 Using template: "${displayTemplate}"`);
+        ctx.logger.info(`🔧 Catalog filter: ${JSON.stringify(catalogFilter)}`);
 
-        // Parse display value to extract entity name
-        let extractedName = "";
-
-        // Pattern 1: "Name - Department" -> extract Name
-        if (displayValue.includes(" - ")) {
-          extractedName = displayValue.split(" - ")[0].trim();
-        }
-        // Pattern 2: "Name (email)" -> extract Name
-        else if (displayValue.includes("(") && displayValue.includes(")")) {
-          const match = displayValue.match(/^(.+?)\s*\(/);
-          if (match) {
-            extractedName = match[1].trim();
-          }
-        }
-        // Pattern 3: Just the name
-        else {
-          extractedName = displayValue.trim();
-        }
-
-        if (!extractedName) {
+        // Validate that template includes metadata.name
+        if (!displayTemplate.includes('metadata.name')) {
           throw new Error(
-            `Could not extract entity name from: "${displayValue}"`
+            `Template must include 'metadata.name' to extract actual entity name. ` +
+            `Current template: "${displayTemplate}". ` +
+            `Example: "${{ metadata.name }} - ${{ metadata.title }}"`
           );
         }
 
-        // Convert to entity reference format
-        const entityName = extractedName
-          .toLowerCase()
-          .replace(/\s+/g, ".")
-          .replace(/[^a-z0-9.\-_]/g, "");
+        // Extract entity kind from catalogFilter
+        const entityKind = catalogFilter.kind || 'Component';
+        ctx.logger.info(`🔍 Entity kind from filter: ${entityKind}`);
 
-        const entityRef = `${entityKind.toLowerCase()}:${entityNamespace}/${entityName}`;
+        // Parse the template to extract variable positions
+        const parseTemplate = (template: string, value: string) => {
+          // Find all variables in template
+          const variables: string[] = [];
+          const templateRegex = /\$\{\{\s*([^}]+)\s*\}\}/g;
+          let match;
+          
+          while ((match = templateRegex.exec(template)) !== null) {
+            variables.push(match[1].trim());
+          }
+          
+          ctx.logger.info(`🔍 Found template variables: ${variables.join(', ')}`);
+          
+          // Create regex pattern by replacing variables with capture groups
+          let regexPattern = template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, '(.+?)');
+          
+          // Escape special regex characters except our capture groups
+          regexPattern = regexPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\(\\\.\\\+\\\?\\\)/g, '(.+?)');
+          
+          // Make the last capture group non-greedy to handle end of string
+          regexPattern = regexPattern.replace(/\(\.\+\?\)$/, '(.+)');
+          
+          ctx.logger.info(`🔍 Created regex pattern: ${regexPattern}`);
+          
+          // Extract values using the regex
+          const regex = new RegExp(regexPattern);
+          const valueMatch = value.match(regex);
+          
+          if (!valueMatch) {
+            throw new Error(`Display value "${value}" doesn't match template pattern "${template}"`);
+          }
+          
+          // Map extracted values to variable names
+          const extractedValues: { [key: string]: string } = {};
+          for (let i = 0; i < variables.length; i++) {
+            extractedValues[variables[i]] = valueMatch[i + 1]?.trim() || '';
+          }
+          
+          return extractedValues;
+        };
 
-        ctx.logger.info(`✅ Extracted entity reference: ${entityRef}`);
+        // Parse the display value using the template
+        const parsedValues = parseTemplate(displayTemplate, displayValue);
+        ctx.logger.info(`🎯 Parsed values: ${JSON.stringify(parsedValues)}`);
+
+        // Extract the actual entity name (metadata.name is required)
+        const extractedName = parsedValues['metadata.name'];
+        
+        if (!extractedName) {
+          throw new Error(
+            `Could not extract metadata.name from parsed values. ` +
+            `Parsed: ${JSON.stringify(parsedValues)}. ` +
+            `Make sure your template includes metadata.name and the display value matches the template.`
+          );
+        }
+
+        // Create entity reference using the ACTUAL entity name (no conversion needed)
+        const entityRef = `${entityKind.toLowerCase()}:${entityNamespace}/${extractedName}`;
+
+        ctx.logger.info(`✅ Extracted entity name: "${extractedName}"`);
+        ctx.logger.info(`✅ Entity kind: ${entityKind}`);
+        ctx.logger.info(`✅ Entity reference: ${entityRef}`);
 
         ctx.output("entityRef", entityRef);
         ctx.output("extractedName", extractedName);
+        ctx.output("parsedValues", parsedValues);
+        ctx.output("entityKind", entityKind);
+
       } catch (error: any) {
         ctx.logger.error(`❌ Error: ${error.message}`);
         throw new Error(`Failed to extract entity reference: ${error.message}`);

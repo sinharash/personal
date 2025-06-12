@@ -1,11 +1,11 @@
-# Simple 2-Step YAML - Extract reference + Fetch entity
+# Fixed YAML - Requires metadata.name in template + dynamic entity kind
 
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: simple-enhanced-entity-picker
-  title: Simple Enhanced Entity Picker
-  description: 2-step approach - extract reference then fetch entity
+  name: fixed-enhanced-entity-picker
+  title: Fixed Enhanced Entity Picker
+  description: Properly extracts metadata.name and gets entity kind dynamically
 spec:
   owner: platform-team
   type: test
@@ -20,46 +20,50 @@ spec:
           type: string
           ui:field: EnhancedEntityPicker
           ui:options:
-            displayEntityFieldAfterFormatting: "${{ metadata.title }} - ${{ spec.profile.department }}"
+            # FIXED: Template MUST include metadata.name for accurate entity reference
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
             catalogFilter:
-              kind: User
+              kind: User # This will be extracted dynamically
 
   steps:
-    # STEP 1: Extract entity reference from display value (no HTTP calls)
+    # STEP 1: Extract entity reference using metadata.name (guaranteed to exist)
     - id: extract-reference
       name: Extract Entity Reference
       action: enhanced:resolveEntity
       input:
         displayValue: ${{ parameters.selectedEntity }}
-        displayTemplate: "${{ metadata.title }} - ${{ spec.profile.department }}"
-        entityKind: "User"
+        displayTemplate: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
+        catalogFilter: # Pass the entire filter to extract entity kind
+          kind: User
         entityNamespace: "default"
 
-    # STEP 2: Use built-in catalog:fetch to get full entity data (has proper auth)
+    # STEP 2: Use built-in catalog:fetch with the REAL entity name
     - id: fetch-entity
       name: Fetch Entity Data
       action: catalog:fetch
       input:
         entityRef: ${{ steps['extract-reference'].output.entityRef }}
 
-    # RESULT: Show that we have full entity access
+    # RESULT: Show that we have accurate entity resolution
     - id: show-result
       name: Show Result
       action: debug:log
       input:
         message: |
-          ✅ SUCCESS! Enhanced Entity Picker Working:
+          ✅ SUCCESS! Accurate Entity Resolution:
 
-          👤 User Selected: ${{ parameters.selectedEntity }}
-          🔗 Entity Reference: ${{ steps['extract-reference'].output.entityRef }}
+          👤 User Sees: ${{ parameters.selectedEntity }}
+          📝 Example: "jdoe - John Doe - Engineering"
 
-          📋 Full Entity Data Available:
+          🎯 Extracted Data:
+          - Real Entity Name: ${{ steps['extract-reference'].output.extractedName }}
+          - Entity Kind: ${{ steps['extract-reference'].output.entityKind }}
+          - Entity Reference: ${{ steps['extract-reference'].output.entityRef }}
+
+          📋 Full Entity Data:
           - Name: ${{ steps['fetch-entity'].output.entity.metadata.name }}
           - Title: ${{ steps['fetch-entity'].output.entity.metadata.title || 'N/A' }}
           - Department: ${{ steps['fetch-entity'].output.entity.spec.profile.department || 'N/A' }}
           - Email: ${{ steps['fetch-entity'].output.entity.spec.profile.email || 'N/A' }}
 
-          🎯 Perfect! You now have:
-          1. Clean user experience (they see: "${{ parameters.selectedEntity }}")
-          2. Full programmatic access to entity data
-          3. No authentication issues
+          🎉 Perfect! Now using REAL entity names, not guessed ones!
