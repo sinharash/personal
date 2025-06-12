@@ -5,6 +5,7 @@ import {
   createBackendModule,
 } from "@backstage/backend-plugin-api";
 import { scaffolderActionsExtensionPoint } from "@backstage/plugin-scaffolder-node/alpha";
+import { catalogServiceRef } from "@backstage/plugin-catalog-node/alpha";
 import { dataAuroraClusterCreateAction } from "./actions/dataAuroraClusterCreate";
 import {
   resolveEntityFromDisplayAction,
@@ -21,20 +22,20 @@ const cloudExperienceScaffolderModule = createBackendModule({
       deps: {
         config: coreServices.rootConfig,
         discovery: coreServices.discovery,
+        catalog: catalogServiceRef, // Add catalog service dependency
         scaffolder: scaffolderActionsExtensionPoint,
       },
-      init: async ({ config, discovery, scaffolder }) => {
+      init: async ({ config, discovery, catalog, scaffolder }) => {
         // Register your existing action
         scaffolder.addActions(
           dataAuroraClusterCreateAction({ config, discovery })
         );
 
-        // Register the new enhanced entity picker actions
-        // FIXED: Pass discovery to extractEntityRefAction too
+        // Register the new enhanced entity picker actions with catalog service
         scaffolder.addActions(
-          resolveEntityFromDisplayAction({ discovery }),
+          resolveEntityFromDisplayAction({ catalogApi: catalog }),
           debugEntityPropertiesAction(),
-          extractEntityRefAction({ discovery }), // Now requires discovery
+          extractEntityRefAction({ catalogApi: catalog }),
           extractEmailFromDisplayAction()
         );
       },

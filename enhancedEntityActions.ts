@@ -1,11 +1,12 @@
 // packages/backend/src/plugins/scaffolder/actions/enhancedEntityActions.ts
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
-import { CatalogClient } from "@backstage/catalog-client";
 
-// FIXED: The full entity resolution action with proper Backstage patterns
-export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
-  const { discovery } = options;
+// FIXED: The full entity resolution action using proper service injection
+export const resolveEntityFromDisplayAction = (options: {
+  catalogApi: any;
+}) => {
+  const { catalogApi } = options;
 
   return createTemplateAction<{
     displayValue: string;
@@ -71,12 +72,6 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
           `Resolving entity: "${displayValue}" with template: "${displayTemplate}"`
         );
 
-        // SIMPLE FIX: Use CatalogClient with discovery only
-        // Many Backstage setups work without explicit fetchApi
-        const catalogApi = new CatalogClient({
-          discoveryApi: discovery,
-        });
-
         // Build filter for entity search
         const filter: any = {};
         if (catalogFilter.kind) {
@@ -95,7 +90,7 @@ export const resolveEntityFromDisplayAction = (options: { discovery: any }) => {
 
         ctx.logger.info(`Using catalog filter: ${JSON.stringify(filter)}`);
 
-        // Fetch entities
+        // FIXED: Use the injected catalog service directly
         const response = await catalogApi.getEntities({ filter });
         ctx.logger.info(`Found ${response.items.length} entities in catalog`);
 
@@ -261,8 +256,8 @@ export const debugEntityPropertiesAction = () => {
 };
 
 // Simple action that extracts entityRef from display format - ALSO FIXED
-export const extractEntityRefAction = (options: { discovery: any }) => {
-  const { discovery } = options;
+export const extractEntityRefAction = (options: { catalogApi: any }) => {
+  const { catalogApi } = options;
 
   return createTemplateAction<{
     displayValue: string;
@@ -316,11 +311,6 @@ export const extractEntityRefAction = (options: { discovery: any }) => {
       try {
         ctx.logger.info(`Extracting entity reference from: "${displayValue}"`);
 
-        // SIMPLE FIX: Use CatalogClient with discovery only
-        const catalogApi = new CatalogClient({
-          discoveryApi: discovery,
-        });
-
         // Build filter
         const filter: any = {};
         if (catalogFilter.kind) {
@@ -336,7 +326,7 @@ export const extractEntityRefAction = (options: { discovery: any }) => {
           }
         });
 
-        // Fetch entities and find match
+        // FIXED: Use the injected catalog service directly
         const response = await catalogApi.getEntities({ filter });
 
         const formatEntityDisplay = (template: string, entity: any): string => {
