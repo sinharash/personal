@@ -73,3 +73,53 @@ spec:
           1. Template MUST include metadata.name for this to work
           2. catalogFilter.kind determines the entity kind dynamically  
           3. Works with any entity kind (User, Component, Group, etc.)
+
+# below is extra debug step:
+steps:
+  # STEP 1: Extract entity reference (This part is likely working)
+  - id: extract-reference
+    name: Extract Entity Reference
+    action: enhanced:resolveEntity
+    input:
+      displayValue: ${{ parameters.selectedEntity }}
+      displayTemplate: "{% raw %}${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}{% endraw %}"
+      catalogFilter:
+        kind: User
+      entityNamespace: "default"
+
+  # STEP 2: Use built-in catalog:fetch
+  - id: fetch-entity
+    name: Fetch Entity Data
+    action: catalog:fetch
+    input:
+      entityRef: ${{ steps['extract-reference'].output.entityRef }}
+
+  # --- NEW DEBUGGING STEP ---
+  # STEP 2a: Inspect the direct output of the fetch step
+  - id: debug-the-fetch
+    name: DEBUG - Inspect Fetch Output
+    action: debug:log
+    input:
+      message: |
+        --- Inspecting catalog:fetch output ---
+        The entityRef we tried to fetch was: ${{ steps['extract-reference'].output.entityRef }}
+
+        The raw output from the fetch step is: ${{ steps['fetch-entity'].output | dump }}
+
+        If 'entity' is null or empty below, it means the ref was not found in the catalog.
+        ---------------------------------------
+
+  # STEP 3: Your original log to show the final result
+  - id: show-result
+    name: Show Result
+    action: debug:log
+    input:
+      message: |
+        ✅ Final Result:
+
+        - Entity Reference Used: ${{ steps['extract-reference'].output.entityRef }}
+
+        - Fetched Name: ${{ steps['fetch-entity'].output.entity.metadata.name | default('NOT FOUND') }}
+        - Fetched Title: ${{ steps['fetch-entity'].output.entity.metadata.title | default('NOT FOUND') }}
+        - Fetched Department: ${{ steps['fetch-entity'].output.entity.spec.profile.department | default('NOT FOUND') }}
+        - Fetched Email: ${{ steps['fetch-entity'].output.entity.spec.profile.email | default('NOT FOUND') }}
