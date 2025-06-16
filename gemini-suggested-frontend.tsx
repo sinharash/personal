@@ -1,17 +1,14 @@
 // FILE: EnhancedEntityPicker.tsx
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Autocomplete, TextField, Box, Typography } from "@mui/material";
 import { useApi } from "@backstage/core-plugin-api";
-import {
-  catalogApiRef,
-  humanizeEntityRef,
-} from "@backstage/plugin-catalog-react";
+import { catalogApiRef } from "@backstage/plugin-catalog-react";
 import { Entity, stringifyEntityRef } from "@backstage/catalog-model";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { get } from "lodash";
 
-// Define the shape of the ui:options this component accepts
+// Define the shape of the ui:options this component accepts from the YAML
 interface CustomEntityPickerUiOptions {
   displayFormat?: string;
   catalogFilter?: { kind?: string; [key: string]: any };
@@ -26,13 +23,15 @@ const formatFromTemplate = (
   templateString: string | undefined
 ): string => {
   if (!templateString) return "";
+
   if (templateString === "${entity.ref}") {
     return stringifyEntityRef(entity);
   }
   let result = templateString;
   const placeholders = templateString.match(/\$\{\{\s*([^}]+)\s*\}\}/g) || [];
+
   for (const placeholder of placeholders) {
-    const path = placeholder.substring(2, placeholder.length - 1);
+    const path = placeholder.substring(2, placeholder.length - 1).trim();
     const value = get(entity, path);
     result = result.replace(
       placeholder,
@@ -48,11 +47,11 @@ export const EnhancedEntityPicker: React.FC<
   const {
     schema,
     uiSchema,
-    formData, // This is the simple display string for our visible field
-    onChange, // The onChange for our visible field
+    formData,
+    onChange,
     rawErrors,
     disabled,
-    formContext, // Access to the entire form's context and methods
+    formContext,
   } = props;
 
   const { "ui:options": options } = uiSchema;
@@ -67,7 +66,7 @@ export const EnhancedEntityPicker: React.FC<
     catalogFilter,
     output,
     outputTargetField,
-    displayFormat = output?.displayValue || "${{ metadata.name }}",
+    displayFormat = "${{ metadata.name }}",
     placeholder = "Select an entity...",
   } = options || {};
 
@@ -87,41 +86,54 @@ export const EnhancedEntityPicker: React.FC<
     fetchEntities();
   }, [fetchEntities]);
 
-  // When the component first loads, use the formData (display string)
-  // to find the matching entity object and pre-fill the component state.
+  // Create the list of options for the dropdown.
+  // Each option contains the original entity and its formatted display text.
+  const displayOptions = useMemo(() => {
+    return (
+      entities
+        .map((entity) => ({
+          entity,
+          displayText: formatFromTemplate(entity, displayFormat),
+        }))
+        // --- IMPORTANT FIX ---
+        // Filter out any entities that result in a blank display string.
+        // This prevents empty rows in the dropdown.
+        .filter((option) => option.displayText.trim() !== "")
+    );
+  }, [entities, displayFormat]);
+
+  // When the component first loads with data, find the matching entity
+  // to pre-fill the component's state.
   useEffect(() => {
-    if (formData && entities.length > 0 && !selectedEntity) {
-      const found = entities.find(
-        (entity) => formatFromTemplate(entity, displayFormat) === formData
+    if (formData && displayOptions.length > 0 && !selectedEntity) {
+      const foundOption = displayOptions.find(
+        (option) => option.displayText === formData
       );
-      if (found) {
-        setSelectedEntity(found);
+      if (foundOption) {
+        setSelectedEntity(foundOption.entity);
       }
     }
-  }, [formData, entities, displayFormat, selectedEntity]);
+  }, [formData, displayOptions, selectedEntity]);
 
   const handleChange = (
     _event: React.SyntheticEvent,
-    newValue: Entity | null
+    option: { entity: Entity; displayText: string } | null
   ) => {
+    const newValue = option?.entity || null;
     setSelectedEntity(newValue); // Update our internal UI state
 
     if (newValue) {
       // 1. Update the VISIBLE field with the simple display string.
-      // The user sees this, and this is what will be on the review page.
-      const displayValue =
-        formatFromTemplate(newValue, displayFormat) ||
-        humanizeEntityRef(newValue);
+      // NO FALLBACK - We only use the string from the template.
+      const displayValue = formatFromTemplate(newValue, displayFormat);
       onChange(displayValue);
 
-      // 2. Update the HIDDEN field with the rich data object for the developer.
+      // 2. Update the HIDDEN field with the rich data object.
       if (output && outputTargetField && formContext.onChange) {
         const outputObject: { [key: string]: any } = {};
         for (const key of Object.keys(output)) {
           outputObject[key] = formatFromTemplate(newValue, output[key]);
         }
-        // Use formContext.onChange to update the entire form's data state,
-        // specifically setting the value for our hidden sibling field.
         formContext.onChange({
           ...formContext.formData,
           [outputTargetField]: outputObject,
@@ -129,9 +141,7 @@ export const EnhancedEntityPicker: React.FC<
       }
     } else {
       // Item was cleared
-      // 1. Clear the VISIBLE field
       onChange(undefined);
-      // 2. Clear the HIDDEN field
       if (outputTargetField && formContext.onChange) {
         formContext.onChange({
           ...formContext.formData,
@@ -141,19 +151,28 @@ export const EnhancedEntityPicker: React.FC<
     }
   };
 
+  // Find the full option object that matches our selected entity state
+  const selectedOption = useMemo(() => {
+    if (!selectedEntity) return null;
+    return (
+      displayOptions.find(
+        (opt) => opt.entity.metadata.uid === selectedEntity.metadata.uid
+      ) || null
+    );
+  }, [selectedEntity, displayOptions]);
+
   return (
     <Box>
-      <Autocomplete<Entity>
-        options={entities}
-        value={selectedEntity}
+      <Autocomplete<{ entity: Entity; displayText: string }>
+        options={displayOptions}
+        value={selectedOption}
         disabled={disabled}
         loading={loading}
         onChange={handleChange}
-        getOptionLabel={(option) =>
-          formatFromTemplate(option, displayFormat) || humanizeEntityRef(option)
-        }
+        // This now simply returns the pre-formatted displayText property. NO FALLBACK.
+        getOptionLabel={(option) => option.displayText}
         isOptionEqualToValue={(option, value) =>
-          option?.metadata?.uid === value?.metadata?.uid
+          option.entity.metadata.uid === value?.entity.metadata.uid
         }
         renderInput={(params) => (
           <TextField
@@ -168,10 +187,8 @@ export const EnhancedEntityPicker: React.FC<
         )}
         renderOption={(props, option) => (
           <Box component="li" {...props}>
-            <Typography variant="body1">
-              {formatFromTemplate(option, displayFormat) ||
-                humanizeEntityRef(option)}
-            </Typography>
+            {/* This also simply renders the pre-formatted displayText. NO FALLBACK. */}
+            <Typography variant="body1">{option.displayText}</Typography>
           </Box>
         )}
       />
