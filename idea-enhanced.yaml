@@ -1,0 +1,166 @@
+# AUTO-ENHANCED TEMPLATE EXAMPLES - Shows both manual and auto-enhanced modes
+
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: auto-enhanced-entity-picker-demo
+  title: Auto-Enhanced Entity Picker Demo
+  description: Demonstrates automatic metadata.name handling for better developer experience
+spec:
+  owner: engineering
+  type: service
+
+  parameters:
+    # SCENARIO 1: Developer wants to hide metadata.name from users
+    # Template does NOT include metadata.name - auto-enhancement will add it invisibly
+    - title: Select User (Auto-Enhanced Mode)
+      properties:
+        selectedUserAutoEnhanced:
+          title: Choose User
+          type: string
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            # ✨ DEVELOPER FREEDOM: No metadata.name required!
+            # Users will see: "John Doe - Engineering Department"
+            # System will automatically handle: "{metadata.name}___HIDDEN_SEPARATOR___{title} - {department}"
+            displayEntityFieldAfterFormatting: "${{ metadata.title }} - ${{ spec.profile.department }}"
+            catalogFilter:
+              kind: User
+            placeholder: "Select a user..."
+
+    # SCENARIO 2: Developer explicitly wants to show metadata.name (existing behavior)
+    - title: Select User (Manual Mode)
+      properties:
+        selectedUserManual:
+          title: Choose User
+          type: string
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            # 🔧 EXPLICIT CONTROL: Developer includes metadata.name
+            # Users will see: "jdoe - John Doe - Engineering"
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
+            catalogFilter:
+              kind: User
+
+    # SCENARIO 3: Multiple entity types with auto-enhancement
+    - title: Select Component (Auto-Enhanced)
+      properties:
+        selectedComponent:
+          title: Choose Component
+          type: string
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            # Users see: "My API Service (REST API)"
+            # System handles: "{name}___HIDDEN_SEPARATOR___{title} ({type})"
+            displayEntityFieldAfterFormatting: "${{ metadata.title }} (${{ spec.type }})"
+            catalogFilter:
+              kind: Component
+
+  steps:
+    # STEP 1: Process auto-enhanced user selection
+    - id: extract-user-auto
+      name: Extract User Reference (Auto-Enhanced)
+      action: enhanced:resolveEntity
+      input:
+        displayValue: ${{ parameters.selectedUserAutoEnhanced }}
+        # The component automatically creates the enhanced template internally
+        # This will be something like: "${{ metadata.name }}___HIDDEN_SEPARATOR__.${{ metadata.title }} - ${{ spec.profile.department }}"
+        displayTemplate: "${{ metadata.title }} - ${{ spec.profile.department }}"
+        catalogFilter:
+          kind: User
+
+    # STEP 2: Fetch complete user data using extracted reference
+    - id: fetch-user-auto
+      name: Fetch User Data (Auto-Enhanced)
+      action: catalog:fetch
+      input:
+        entityRef: ${{ steps['extract-user-auto'].output.entityRef }}
+
+    # STEP 3: Process manual user selection (existing behavior)
+    - id: extract-user-manual
+      name: Extract User Reference (Manual)
+      action: enhanced:resolveEntity
+      input:
+        displayValue: ${{ parameters.selectedUserManual }}
+        displayTemplate: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
+        catalogFilter:
+          kind: User
+
+    # STEP 4: Fetch complete user data
+    - id: fetch-user-manual
+      name: Fetch User Data (Manual)
+      action: catalog:fetch
+      input:
+        entityRef: ${{ steps['extract-user-manual'].output.entityRef }}
+
+    # STEP 5: Process component selection
+    - id: extract-component
+      name: Extract Component Reference
+      action: enhanced:resolveEntity
+      input:
+        displayValue: ${{ parameters.selectedComponent }}
+        displayTemplate: "${{ metadata.title }} (${{ spec.type }})"
+        catalogFilter:
+          kind: Component
+
+    # STEP 6: Fetch component data
+    - id: fetch-component
+      name: Fetch Component Data
+      action: catalog:fetch
+      input:
+        entityRef: ${{ steps['extract-component'].output.entityRef }}
+
+    # STEP 7: Show comprehensive results
+    - id: show-results
+      name: Show Results
+      action: debug:log
+      input:
+        message: |
+          🎉 AUTO-ENHANCED ENTITY PICKER RESULTS:
+
+          👤 AUTO-ENHANCED USER SELECTION:
+          ================================
+          What User Saw: "${{ steps['extract-user-auto'].output.userDisplayValue }}"
+          Example: "John Doe - Engineering Department"
+
+          Auto-Enhanced: ${{ steps['extract-user-auto'].output.isAutoEnhanced }}
+          Entity Reference: ${{ steps['extract-user-auto'].output.entityRef }}
+          Extracted Name: ${{ steps['extract-user-auto'].output.extractedName }}
+
+          Full User Data:
+          - Name: ${{ steps['fetch-user-auto'].output.entity.metadata.name }}
+          - Title: ${{ steps['fetch-user-auto'].output.entity.metadata.title }}
+          - Department: ${{ steps['fetch-user-auto'].output.entity.spec.profile.department }}
+          - Email: ${{ steps['fetch-user-auto'].output.entity.spec.profile.email }}
+
+          🔧 MANUAL USER SELECTION:
+          =========================
+          What User Saw: "${{ steps['extract-user-manual'].output.userDisplayValue }}"
+          Example: "jdoe - John Doe - Engineering"
+
+          Auto-Enhanced: ${{ steps['extract-user-manual'].output.isAutoEnhanced }}
+          Entity Reference: ${{ steps['extract-user-manual'].output.entityRef }}
+
+          📦 COMPONENT SELECTION:
+          ======================
+          What User Saw: "${{ steps['extract-component'].output.userDisplayValue }}"
+          Example: "My API Service (REST API)"
+
+          Auto-Enhanced: ${{ steps['extract-component'].output.isAutoEnhanced }}
+          Entity Reference: ${{ steps['extract-component'].output.entityRef }}
+          Component Type: ${{ steps['fetch-component'].output.entity.spec.type }}
+
+          ✨ DEVELOPER BENEFITS:
+          =====================
+          1. 🎯 Clean UX: Users see human-readable labels without technical IDs
+          2. 🔧 Simple Templates: No forced metadata.name in display templates  
+          3. 📋 Full Data Access: Complete entity information available in steps
+          4. 🔄 Backwards Compatible: Existing templates continue to work
+          5. ⚡ Auto-Enhancement: System handles metadata.name requirement automatically
+
+          ⚠️ MIGRATION NOTES:
+          ===================
+          - Existing templates with metadata.name: No changes needed
+          - New templates: Can omit metadata.name for cleaner user experience
+          - All entity references guaranteed to work with catalog:fetch
+          - Debug info available in development mode

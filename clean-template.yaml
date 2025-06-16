@@ -1,0 +1,75 @@
+# Final YAML - REQUIRES metadata.name in template (correct approach)
+
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: final-enhanced-entity-picker
+  title: Final Enhanced Entity Picker
+  description: Correctly extracts metadata.name for accurate entity resolution
+spec:
+  owner: wg119310
+  type: service
+
+  parameters:
+    - title: Select Entity
+      required:
+        - selectedEntity
+      properties:
+        selectedEntity:
+          title: Choose User
+          type: string
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            # CRITICAL: Template MUST include metadata.name for accurate entity resolution
+            displayEntityFieldAfterFormatting: "${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}"
+            catalogFilter:
+              kind: User
+
+  steps:
+    # STEP 1: Extract entity reference using REAL metadata.name (no guessing!)
+    - id: extract-reference
+      name: Extract Entity Reference
+      action: enhanced:resolveEntity
+      input:
+        displayValue: ${{ parameters.selectedEntity }}
+        # MUST match exactly what's in ui:options above AND include metadata.name
+        displayTemplate: "{% raw %}${{ metadata.name }} - ${{ metadata.title }} - ${{ spec.profile.department }}{% endraw %}"
+        catalogFilter:
+          kind: user # CRITICAL: This determines the entity kind for the reference
+          # entityNamespace: 'sun-dial'
+
+    # STEP 2: Use built-in catalog:fetch with REAL entity name (guaranteed to work)
+    - id: fetch-entity
+      name: Fetch Entity Data
+      action: catalog:fetch
+      input:
+        entityRef: ${{ steps['extract-reference'].output.entityRef }}
+
+    # RESULT: Show successful entity resolution
+    - id: show-result
+      name: Show Result
+      action: debug:log
+      input:
+        message: |
+          ✅ SUCCESS! Accurate Entity Resolution:
+
+          👤 User Sees: ${{ parameters.selectedEntity }}
+          📝 Example: "jdoe - John Doe - Engineering"
+
+          🎯 Extracted Data:
+          - Real Entity Name: ${{ steps['extract-reference'].output.extractedName | default('NOT FOUND') }}
+          - Entity Kind: ${{ steps['extract-reference'].output.entityKind | default('NOT FOUND')}}
+          - Entity Reference: ${{ steps['extract-reference'].output.entityRef | default('NOT FOUND') }}
+
+          📋 Full Entity Data:
+          - Name: ${{ steps['fetch-entity'].output.entity.metadata.name | default('NOT FOUND') }}
+          - Title: ${{ steps['fetch-entity'].output.entity.metadata.title | default('NOT FOUND') }}
+          - Department: ${{ steps['fetch-entity'].output.entity.spec.profile.department | default('NOT FOUND') }}
+          - Email: ${{ steps['fetch-entity'].output.entity.spec.profile.email | default('NOT FOUND') }}
+
+          🎉 Perfect! Using REAL entity names (metadata.name), not guessed ones!
+
+          ⚠️ Developer Notes:
+          1. Template MUST include metadata.name for this to work
+          2. catalogFilter.kind determines the entity kind dynamically  
+          3. Works with any entity kind (User, Component, Group, etc.)
