@@ -131,9 +131,12 @@ export const EnhancedEntityPicker = ({
         }
         loading={loading}
         disabled={disabled}
-        isOptionEqualToValue={(option, value) =>
-          option.entity.metadata.name === value.entity?.metadata.name
-        }
+        isOptionEqualToValue={(option, value) => {
+          if (!option?.entityId || !value?.entityId) {
+            return false;
+          }
+          return option.entityId === value.entityId;
+        }}
         renderInput={(params) => (
           <TextField
             {...params}
