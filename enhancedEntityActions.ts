@@ -2,9 +2,12 @@
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 import { CatalogClient } from "@backstage/catalog-client";
+import { DiscoveryApi } from "@backstage/core-plugin-api";
 
 // SINGLE ACTION: Extract entity reference using template parsing with metadata.name requirement
-export const resolveEntityFromDisplayAction = () => {
+export const resolveEntityFromDisplayAction = (options?: {
+  discovery?: DiscoveryApi;
+}) => {
   return createTemplateAction<{
     displayValue: string;
     displayTemplate: string;
@@ -86,6 +89,9 @@ export const resolveEntityFromDisplayAction = () => {
         ctx.logger.info(`🔧 Parsing display value: "${displayValue}"`);
         ctx.logger.info(`🔧 Using template: "${displayTemplate}"`);
         ctx.logger.info(`🔧 Catalog filter: ${JSON.stringify(catalogFilter)}`);
+
+        // Store discovery API from options
+        const discoveryApi = options?.discovery;
 
         // Validate that template includes metadata.name (REQUIRED)
         if (!displayTemplate.includes("metadata.name")) {
@@ -180,11 +186,9 @@ export const resolveEntityFromDisplayAction = () => {
         // If no namespace was provided, attempt to look it up
         if (!resolvedNamespace) {
           try {
-            // If we have a discovery service in context, use it to create a catalog client
-            if (ctx.discovery) {
-              const catalogClient = new CatalogClient({
-                discoveryApi: ctx.discovery,
-              });
+            // If we have a discovery service from options, use it to create a catalog client
+            if (discoveryApi) {
+              const catalogClient = new CatalogClient({ discoveryApi });
 
               // Look up the entity by name and kind
               const entities = await catalogClient.getEntities({
@@ -223,7 +227,7 @@ export const resolveEntityFromDisplayAction = () => {
               }
             } else {
               ctx.logger.warn(
-                "⚠️ No discovery service available, cannot look up entity namespace"
+                "⚠️ No discovery service provided, cannot look up entity namespace"
               );
             }
           } catch (error) {
