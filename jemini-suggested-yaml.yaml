@@ -1,0 +1,76 @@
+# FILE: template.yaml
+
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: final-entity-picker-workflow-v2
+  title: Final Entity Picker Workflow (Corrected)
+  description: A template with a clean UX and powerful, hidden backend data.
+spec:
+  owner: user:guest # Change to a valid owner in your Backstage instance
+  type: service
+
+  parameters:
+    - title: Component Details
+      required:
+        - componentName
+        - owner
+      properties:
+        componentName:
+          title: Component Name
+          type: string
+          description: A unique name for the component.
+          ui:autofocus: true
+
+        # --- 1. THE VISIBLE FIELD (for the User) ---
+        # The user interacts with this. Its value is just a simple string.
+        # This ensures the Review Step is perfectly clean.
+        owner:
+          title: Component Owner
+          type: string
+          description: Select an owner for this component.
+          ui:field: EnhancedEntityPicker # Our component is attached here.
+          ui:options:
+            # This tells our component which hidden field to write the rich data to.
+            outputTargetField: "ownerData"
+            # This template defines what the user sees in the dropdown.
+            # The developer has complete freedom and does NOT need metadata.name here.
+            displayFormat: "${{ spec.profile.displayName }} (Dept: ${{ spec.profile.department }})"
+            # This defines the shape of the object written to the hidden field.
+            output:
+              ref: "${entity.ref}"
+              email: "${spec.profile.email}"
+              displayName: "${spec.profile.displayName}"
+              name: "${metadata.name}" # The backend still gets the real name.
+            catalogFilter:
+              kind: User
+
+        # --- 2. THE HIDDEN FIELD (for the Developer) ---
+        # This object is never shown in the UI, not even on the review page.
+        ownerData:
+          title: Data for the selected owner
+          type: object
+          ui:widget: "hidden" # This hides the entire parameter from all UI.
+
+  steps:
+    # The backend steps now use the clean, rich data from the hidden parameter.
+    - id: log-data
+      name: Log Selected Data
+      action: debug:log
+      input:
+        message: |
+          --- DEBUGGING PICKER OUTPUT ---
+          The value the user saw and selected is: ${{ parameters.owner }}
+
+          The hidden data object for the developer is: ${{ parameters.ownerData | dump }}
+
+          The ref for the backend is: ${{ parameters.ownerData.ref }}
+          The email is: ${{ parameters.ownerData.email }}
+          ---------------------------------
+
+    - id: fetch-user
+      name: Fetch User Entity
+      action: catalog:fetch # You can now use the standard built-in action
+      input:
+        # Use the 'ref' from the hidden data object.
+        entityRef: ${{ parameters.ownerData.ref }}
