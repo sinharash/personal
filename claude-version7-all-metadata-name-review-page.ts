@@ -1,4 +1,6 @@
-// File 1: Enhanced Entity Picker Component
+//thisis fixed code to remove second 
+
+// File 1: Enhanced Entity Picker Component (FIXED)
 // packages/app/src/scaffolder/EnhancedEntityPicker/EnhancedEntityPicker.tsx
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -19,7 +21,7 @@ interface EnhancedEntityPickerProps
     string,
     {
       displayEntityFieldAfterFormatting?: string;
-      uniqueIdentifierField?: string; // NEW: Unique field for entity resolution
+      uniqueIdentifierField?: string;
       catalogFilter?: CatalogFilter;
       placeholder?: string;
     }
@@ -52,10 +54,9 @@ export const EnhancedEntityPicker = ({
     uiSchema?.["ui:options"]?.displayEntityFieldAfterFormatting ||
     "${{ metadata.title || metadata.name }}";
   
-  // NEW: Unique identifier template for resolution
   const uniqueIdentifierTemplate =
     uiSchema?.["ui:options"]?.uniqueIdentifierField ||
-    "metadata.name"; // Default to metadata.name
+    "metadata.name";
     
   const catalogFilter = uiSchema?.["ui:options"]?.catalogFilter || {};
   const placeholder =
@@ -95,22 +96,21 @@ export const EnhancedEntityPicker = ({
   // Parse stored value to find selected entity
   useEffect(() => {
     if (formData && entities.length > 0) {
-      // Try to parse the stored format: "displayValue<br/>Entity Name: uniqueValue"
-      const parts = formData.split('<br/>');
-      if (parts.length === 2 && parts[1].startsWith('Entity Name: ')) {
-        const displayValue = parts[0];
-        const uniqueValue = parts[1].replace('Entity Name: ', '');
+      // Try to parse the stored format: "displayValue\nEntity Name: uniqueValue"
+      const lines = formData.split('\n');
+      if (lines.length === 2 && lines[1].startsWith('Entity Name: ')) {
+        const displayValue = lines[0];
+        const uniqueValue = lines[1].replace('Entity Name: ', '');
         const found = entities.find((entity) => {
-          const entityUniqueValue = formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", entity);
+          const entityUniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity);
           return entityUniqueValue === uniqueValue;
         });
         setSelectedEntity(found || null);
       } else {
-        // Fallback: try to match by display value (for cases where format doesn't match)
-        const displayValueToMatch = parts.length > 1 ? parts[0] : formData;
+        // Fallback: try to match by display value
         const found = entities.find((entity) => {
           const displayValue = formatEntityDisplay(displayTemplate, entity);
-          return displayValue === displayValueToMatch;
+          return displayValue === formData;
         });
         setSelectedEntity(found || null);
       }
@@ -122,11 +122,10 @@ export const EnhancedEntityPicker = ({
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
-      const uniqueValue = formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", newValue);
+      const uniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, newValue);
       
-      // 🎯 Store in a clean, user-friendly format for review page
-      // Try HTML line break instead of \n
-      const combinedValue = `${displayValue}<br/>Entity Name: ${uniqueValue}`;
+      // 🎯 FIXED: Better formatting for review page with proper line break
+      const combinedValue = `${displayValue}\nEntity Name: ${uniqueValue}`;
       
       onChange(combinedValue);
       setSelectedEntity(newValue);
@@ -148,7 +147,7 @@ export const EnhancedEntityPicker = ({
     .map((entity) => ({
       entity,
       displayText: formatEntityDisplay(displayTemplate, entity),
-      uniqueValue: formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", entity),
+      uniqueValue: formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity),
       entityRef: stringifyEntityRef(entity),
     }))
     .filter((option) => option.displayText && option.displayText.trim() !== "");
@@ -188,22 +187,23 @@ export const EnhancedEntityPicker = ({
           <Box component="li" {...props}>
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
-              {/* No debug info in dropdown - keep it clean */}
+              {/* 🎯 REMOVED: No longer showing unique identifier in dropdown */}
             </Box>
           </Box>
         )}
       />
 
+      {/* 🎯 OPTIONAL: Keep debug info but make it less intrusive */}
       {process.env.NODE_ENV === "development" && (
         <Box sx={{ mt: 1, p: 1, bgcolor: "grey.50", fontSize: "11px" }}>
-          <strong>Debug:</strong> {displayOptions.length} options
+          <strong>Debug:</strong> {displayOptions.length} options available
           <div>Display Template: {displayTemplate}</div>
           <div>Unique Identifier: {uniqueIdentifierTemplate}</div>
           {selectedEntity && (
             <div>
-              ✅ Display: {formatEntityDisplay(displayTemplate, selectedEntity)}
+              ✅ Selected Display: {formatEntityDisplay(displayTemplate, selectedEntity)}
               <br />
-              🔑 Unique: {formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", selectedEntity)}
+              🔑 Unique ID: {formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, selectedEntity)}
             </div>
           )}
         </Box>
@@ -212,13 +212,232 @@ export const EnhancedEntityPicker = ({
   );
 };
 
+
+// // File 1: Enhanced Entity Picker Component
+// // packages/app/src/scaffolder/EnhancedEntityPicker/EnhancedEntityPicker.tsx
+
+// import React, { useEffect, useState, useCallback } from "react";
+// import { Autocomplete, TextField, Box } from "@mui/material";
+// import { useApi } from "@backstage/core-plugin-api";
+// import { catalogApiRef } from "@backstage/plugin-catalog-react";
+// import { Entity, stringifyEntityRef } from "@backstage/catalog-model";
+// import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
+
+// interface CatalogFilter {
+//   kind?: string;
+//   type?: string;
+//   [key: string]: any;
+// }
+
+// interface EnhancedEntityPickerProps
+//   extends FieldExtensionComponentProps<
+//     string,
+//     {
+//       displayEntityFieldAfterFormatting?: string;
+//       uniqueIdentifierField?: string; // NEW: Unique field for entity resolution
+//       catalogFilter?: CatalogFilter;
+//       placeholder?: string;
+//     }
+//   > {}
+
+// const formatEntityDisplay = (template: string, entity: Entity): string => {
+//   return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+//     const trimmedPath = path.trim();
+//     const value = trimmedPath.split(".").reduce((obj: any, key: string) => {
+//       return obj && obj[key] !== undefined ? obj[key] : "";
+//     }, entity);
+//     return value || "";
+//   });
+// };
+
+// export const EnhancedEntityPicker = ({
+//   formData,
+//   onChange,
+//   schema,
+//   uiSchema,
+//   rawErrors,
+//   disabled,
+// }: EnhancedEntityPickerProps) => {
+//   const catalogApi = useApi(catalogApiRef);
+//   const [entities, setEntities] = useState<Entity[]>([]);
+//   const [loading, setLoading] = useState(false);
+//   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
+
+//   const displayTemplate =
+//     uiSchema?.["ui:options"]?.displayEntityFieldAfterFormatting ||
+//     "${{ metadata.title || metadata.name }}";
+  
+//   // NEW: Unique identifier template for resolution
+//   const uniqueIdentifierTemplate =
+//     uiSchema?.["ui:options"]?.uniqueIdentifierField ||
+//     "metadata.name"; // Default to metadata.name
+    
+//   const catalogFilter = uiSchema?.["ui:options"]?.catalogFilter || {};
+//   const placeholder =
+//     uiSchema?.["ui:options"]?.placeholder || "Select an entity...";
+
+//   const fetchEntities = useCallback(async () => {
+//     setLoading(true);
+//     try {
+//       const filter: any = {};
+
+//       if (catalogFilter.kind) {
+//         filter.kind = catalogFilter.kind;
+//       }
+//       if (catalogFilter.type) {
+//         filter["spec.type"] = catalogFilter.type;
+//       }
+
+//       Object.keys(catalogFilter).forEach((key) => {
+//         if (key !== "kind" && key !== "type") {
+//           filter[key] = catalogFilter[key];
+//         }
+//       });
+
+//       const response = await catalogApi.getEntities({ filter });
+//       setEntities(response.items);
+//     } catch (error) {
+//       console.error("Error fetching entities:", error);
+//     } finally {
+//       setLoading(false);
+//     }
+//   }, [catalogApi, catalogFilter]);
+
+//   useEffect(() => {
+//     fetchEntities();
+//   }, [fetchEntities]);
+
+//   // Parse stored value to find selected entity
+//   useEffect(() => {
+//     if (formData && entities.length > 0) {
+//       // Try to parse the stored format: "displayValue\nEntity Name: uniqueValue"
+//       const lines = formData.split('\n');
+//       if (lines.length === 2 && lines[1].startsWith('Entity Name: ')) {
+//         const displayValue = lines[0];
+//         const uniqueValue = lines[1].replace('Entity Name: ', '');
+//         const found = entities.find((entity) => {
+//           const entityUniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity);
+//           return entityUniqueValue === uniqueValue;
+//         });
+//         setSelectedEntity(found || null);
+//       } else {
+//         // Fallback: try to match by display value
+//         const found = entities.find((entity) => {
+//           const displayValue = formatEntityDisplay(displayTemplate, entity);
+//           return displayValue === formData;
+//         });
+//         setSelectedEntity(found || null);
+//       }
+//     } else {
+//       setSelectedEntity(null);
+//     }
+//   }, [formData, entities, displayTemplate, uniqueIdentifierTemplate]);
+
+//   const handleChange = (event: any, newValue: Entity | null) => {
+//     if (newValue) {
+//       const displayValue = formatEntityDisplay(displayTemplate, newValue);
+//       const uniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, newValue);
+      
+//       // 🎯 Store in a clean, user-friendly format for review page
+//       // Format: "Display Value\nEntity Name: uniqueValue"
+//       const combinedValue = `${displayValue}\nEntity Name: ${uniqueValue}`;
+      
+//       onChange(combinedValue);
+//       setSelectedEntity(newValue);
+
+//       console.log(`🎯 Enhanced Entity Picker stored:`, {
+//         display: displayValue,
+//         unique: uniqueValue,
+//         combined: combinedValue,
+//         entityRef: stringifyEntityRef(newValue)
+//       });
+
+//     } else {
+//       onChange("");
+//       setSelectedEntity(null);
+//     }
+//   };
+
+//   const displayOptions = entities
+//     .map((entity) => ({
+//       entity,
+//       displayText: formatEntityDisplay(displayTemplate, entity),
+//       uniqueValue: formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity),
+//       entityRef: stringifyEntityRef(entity),
+//     }))
+//     .filter((option) => option.displayText && option.displayText.trim() !== "");
+
+//   const currentSelection = selectedEntity
+//     ? displayOptions.find(
+//         (opt) => stringifyEntityRef(opt.entity) === stringifyEntityRef(selectedEntity)
+//       ) || null
+//     : null;
+
+//   return (
+//     <Box>
+//       <Autocomplete
+//         options={displayOptions}
+//         getOptionLabel={(option) => option.displayText}
+//         value={currentSelection}
+//         onChange={(event, newValue) =>
+//           handleChange(event, newValue?.entity || null)
+//         }
+//         loading={loading}
+//         disabled={disabled}
+//         isOptionEqualToValue={(option, value) =>
+//           option.entityRef === value.entityRef
+//         }
+//         renderInput={(params) => (
+//           <TextField
+//             {...params}
+//             label={schema.title}
+//             placeholder={placeholder}
+//             error={!!rawErrors?.length}
+//             helperText={rawErrors?.length ? rawErrors[0] : schema.description}
+//             variant="outlined"
+//             fullWidth
+//           />
+//         )}
+//         renderOption={(props, option) => (
+//           <Box component="li" {...props}>
+//             <Box>
+//               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
+//               {/* Show unique identifier in development */}
+//               {process.env.NODE_ENV === "development" && (
+//                 <Box sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+//                   {uniqueIdentifierTemplate}: {option.uniqueValue}
+//                 </Box>
+//               )}
+//             </Box>
+//           </Box>
+//         )}
+//       />
+
+//       {process.env.NODE_ENV === "development" && (
+//         <Box sx={{ mt: 1, p: 1, bgcolor: "grey.50", fontSize: "11px" }}>
+//           <strong>Debug:</strong> {displayOptions.length} options
+//           <div>Display Template: {displayTemplate}</div>
+//           <div>Unique Identifier: {uniqueIdentifierTemplate}</div>
+//           {selectedEntity && (
+//             <div>
+//               ✅ Display: {formatEntityDisplay(displayTemplate, selectedEntity)}
+//               <br />
+//               🔑 Unique: {formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, selectedEntity)}
+//             </div>
+//           )}
+//         </Box>
+//       )}
+//     </Box>
+//   );
+// };
+
 // action
 // File 2: Backend Action
 // packages/backend/src/plugins/scaffolder/actions/enhancedEntityActions.ts
 
 import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
 
-export const createEntityRefAction = () => {
+export const resolveEntityFromDisplayAction = () => {
   return createTemplateAction<{
     combinedValue: string;
     entityKind: string;
@@ -352,22 +571,7 @@ spec:
               kind: User
             placeholder: "Select a team member..."
 
-    - title: Select Component
-      required:
-        - selectedComponent
-      properties:
-        selectedComponent:
-          title: Choose Component
-          type: string
-          ui:field: EnhancedEntityPicker
-          ui:options:
-            # 🎨 Different display for components
-            displayEntityFieldAfterFormatting: "${{ metadata.title }} (${{ spec.type }})"
-            # 🔑 Use metadata.name for unique identification
-            uniqueIdentifierField: "metadata.name"
-            catalogFilter:
-              kind: Component
-            placeholder: "Select a component..."
+    
 
   steps:
     # 🎯 STEP 1: Create entityRef from unique identifier (no catalog API!)
@@ -379,29 +583,18 @@ spec:
         entityKind: User
         entityNamespace: default
 
-    # 🎯 STEP 2: Create entityRef for component
-    - id: resolve-component
-      name: Resolve Component EntityRef  
-      action: enhanced:createEntityRef
-      input:
-        combinedValue: ${{ parameters.selectedComponent }}
-        entityKind: Component
-        entityNamespace: default
+   
 
-    # 🎯 STEP 3: Use standard catalog:fetch with created entityRefs
+    # 🎯 STEP 2: Use standard catalog:fetch with created entityRefs
     - id: fetch-user
       name: Fetch User Details
       action: catalog:fetch
       input:
         entityRef: ${{ steps['resolve-user'].output.entityRef }}
 
-    - id: fetch-component
-      name: Fetch Component Details
-      action: catalog:fetch
-      input:
-        entityRef: ${{ steps['resolve-component'].output.entityRef }}
+   
 
-    # 🎉 STEP 4: Show it working
+    # 🎉 STEP 3: Show it working
     - id: show-success
       name: Show Success
       action: debug:log
@@ -414,20 +607,13 @@ spec:
           - Unique Identifier: ${{ steps['resolve-user'].output.uniqueValue }}
           - EntityRef: ${{ steps['resolve-user'].output.entityRef }}
 
-          📦 Component Selection:
-          - What User Saw: "${{ steps['resolve-component'].output.displayValue }}"
-          - Unique Identifier: ${{ steps['resolve-component'].output.uniqueValue }}
-          - EntityRef: ${{ steps['resolve-component'].output.entityRef }}
-
+         
           📋 Full User Details:
           - Name: ${{ steps['fetch-user'].output.entity.metadata.name }}
           - Title: ${{ steps['fetch-user'].output.entity.metadata.title }}
           - Email: ${{ steps['fetch-user'].output.entity.spec.profile.email }}
 
-          📋 Full Component Details:
-          - Name: ${{ steps['fetch-component'].output.entity.metadata.name }}
-          - Title: ${{ steps['fetch-component'].output.entity.metadata.title }}
-          - Type: ${{ steps['fetch-component'].output.entity.spec.type }}
+         
 
           ✅ PERFECT SOLUTION:
           1. ✅ Beautiful UX - users see clean display values in dropdown
