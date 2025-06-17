@@ -95,11 +95,11 @@ export const EnhancedEntityPicker = ({
   // Parse stored value to find selected entity
   useEffect(() => {
     if (formData && entities.length > 0) {
-      // Try to parse the stored format: "displayValue\nEntity Name: uniqueValue"
-      const lines = formData.split('\n');
-      if (lines.length === 2 && lines[1].startsWith('Entity Name: ')) {
-        const displayValue = lines[0];
-        const uniqueValue = lines[1].replace('Entity Name: ', '');
+      // Try to parse the stored format: "displayValue<br/>Entity Name: uniqueValue"
+      const parts = formData.split('<br/>');
+      if (parts.length === 2 && parts[1].startsWith('Entity Name: ')) {
+        const displayValue = parts[0];
+        const uniqueValue = parts[1].replace('Entity Name: ', '');
         const found = entities.find((entity) => {
           const entityUniqueValue = formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", entity);
           return entityUniqueValue === uniqueValue;
@@ -107,7 +107,7 @@ export const EnhancedEntityPicker = ({
         setSelectedEntity(found || null);
       } else {
         // Fallback: try to match by display value (for cases where format doesn't match)
-        const displayValueToMatch = lines.length > 1 ? lines[0] : formData;
+        const displayValueToMatch = parts.length > 1 ? parts[0] : formData;
         const found = entities.find((entity) => {
           const displayValue = formatEntityDisplay(displayTemplate, entity);
           return displayValue === displayValueToMatch;
@@ -125,8 +125,8 @@ export const EnhancedEntityPicker = ({
       const uniqueValue = formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", newValue);
       
       // 🎯 Store in a clean, user-friendly format for review page
-      // Format: "Display Value\nEntity Name: uniqueValue"
-      const combinedValue = `${displayValue}\nEntity Name: ${uniqueValue}`;
+      // Try HTML line break instead of \n
+      const combinedValue = `${displayValue}<br/>Entity Name: ${uniqueValue}`;
       
       onChange(combinedValue);
       setSelectedEntity(newValue);
@@ -188,12 +188,7 @@ export const EnhancedEntityPicker = ({
           <Box component="li" {...props}>
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
-              {/* Show unique identifier in development */}
-              {process.env.NODE_ENV === "development" && (
-                <Box sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                  {uniqueIdentifierTemplate}: {option.uniqueValue}
-                </Box>
-              )}
+              {/* No debug info in dropdown - keep it clean */}
             </Box>
           </Box>
         )}
