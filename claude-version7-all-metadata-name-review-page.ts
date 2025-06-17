@@ -1,6 +1,4 @@
-//thisis fixed code to remove second 
-
-// File 1: Enhanced Entity Picker Component (FIXED)
+// File 1: Enhanced Entity Picker Component (FIXED - No template syntax mixing)
 // packages/app/src/scaffolder/EnhancedEntityPicker/EnhancedEntityPicker.tsx
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -27,13 +25,34 @@ interface EnhancedEntityPickerProps
     }
   > {}
 
-const formatEntityDisplay = (template: string, entity: Entity): string => {
-  return template.replace(/\$\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-    const trimmedPath = path.trim();
-    const value = trimmedPath.split(".").reduce((obj: any, key: string) => {
-      return obj && obj[key] !== undefined ? obj[key] : "";
-    }, entity);
+// Helper function to get nested property value from object
+const getNestedProperty = (obj: any, path: string): string => {
+  try {
+    const value = path.split(".").reduce((current, key) => {
+      return current && current[key] !== undefined ? current[key] : "";
+    }, obj);
     return value || "";
+  } catch {
+    return "";
+  }
+};
+
+// Format entity display using simple template syntax {{path}}
+const formatEntityDisplay = (template: string, entity: Entity): string => {
+  return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+    const trimmedPath = path.trim();
+    
+    // Handle fallback syntax like "metadata.title || metadata.name"
+    if (trimmedPath.includes(" || ")) {
+      const paths = trimmedPath.split(" || ").map(p => p.trim());
+      for (const p of paths) {
+        const value = getNestedProperty(entity, p);
+        if (value) return value;
+      }
+      return "";
+    }
+    
+    return getNestedProperty(entity, trimmedPath);
   });
 };
 
@@ -50,9 +69,10 @@ export const EnhancedEntityPicker = ({
   const [loading, setLoading] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
 
+  // Use simple {{}} syntax instead of mixing with Nunjucks ${{}}
   const displayTemplate =
     uiSchema?.["ui:options"]?.displayEntityFieldAfterFormatting ||
-    "${{ metadata.title || metadata.name }}";
+    "{{ metadata.title || metadata.name }}";
   
   const uniqueIdentifierTemplate =
     uiSchema?.["ui:options"]?.uniqueIdentifierField ||
@@ -99,10 +119,9 @@ export const EnhancedEntityPicker = ({
       // Try to parse the stored format: "displayValue\nEntity Name: uniqueValue"
       const lines = formData.split('\n');
       if (lines.length === 2 && lines[1].startsWith('Entity Name: ')) {
-        const displayValue = lines[0];
         const uniqueValue = lines[1].replace('Entity Name: ', '');
         const found = entities.find((entity) => {
-          const entityUniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity);
+          const entityUniqueValue = getNestedProperty(entity, uniqueIdentifierTemplate);
           return entityUniqueValue === uniqueValue;
         });
         setSelectedEntity(found || null);
@@ -122,15 +141,15 @@ export const EnhancedEntityPicker = ({
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
-      const uniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, newValue);
+      const uniqueValue = getNestedProperty(newValue, uniqueIdentifierTemplate);
       
-      // 🎯 FIXED: Better formatting for review page with proper line break
+      // Store in format for review page with proper line break
       const combinedValue = `${displayValue}\nEntity Name: ${uniqueValue}`;
       
       onChange(combinedValue);
       setSelectedEntity(newValue);
 
-      console.log(`🎯 Enhanced Entity Picker stored:`, {
+      console.log('Enhanced Entity Picker stored:', {
         display: displayValue,
         unique: uniqueValue,
         combined: combinedValue,
@@ -147,7 +166,7 @@ export const EnhancedEntityPicker = ({
     .map((entity) => ({
       entity,
       displayText: formatEntityDisplay(displayTemplate, entity),
-      uniqueValue: formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity),
+      uniqueValue: getNestedProperty(entity, uniqueIdentifierTemplate),
       entityRef: stringifyEntityRef(entity),
     }))
     .filter((option) => option.displayText && option.displayText.trim() !== "");
@@ -187,29 +206,130 @@ export const EnhancedEntityPicker = ({
           <Box component="li" {...props}>
             <Box>
               <Box sx={{ fontWeight: "medium" }}>{option.displayText}</Box>
-              {/* 🎯 REMOVED: No longer showing unique identifier in dropdown */}
             </Box>
           </Box>
         )}
       />
 
-      {/* 🎯 OPTIONAL: Keep debug info but make it less intrusive */}
       {process.env.NODE_ENV === "development" && (
         <Box sx={{ mt: 1, p: 1, bgcolor: "grey.50", fontSize: "11px" }}>
           <strong>Debug:</strong> {displayOptions.length} options available
           <div>Display Template: {displayTemplate}</div>
-          <div>Unique Identifier: {uniqueIdentifierTemplate}</div>
+          <div>Unique Identifier Field: {uniqueIdentifierTemplate}</div>
           {selectedEntity && (
             <div>
-              ✅ Selected Display: {formatEntityDisplay(displayTemplate, selectedEntity)}
+              Selected Display: {formatEntityDisplay(displayTemplate, selectedEntity)}
               <br />
-              🔑 Unique ID: {formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, selectedEntity)}
+              Unique ID: {getNestedProperty(selectedEntity, uniqueIdentifierTemplate)}
             </div>
           )}
         </Box>
       )}
     </Box>
   );
+};
+
+// File 2: Backend Action (No template syntax issues)
+// packages/backend/src/plugins/scaffolder/actions/enhancedEntityActions.ts
+
+import { createTemplateAction } from "@backstage/plugin-scaffolder-node";
+
+export const resolveEntityFromDisplayAction = () => {
+  return createTemplateAction<{
+    combinedValue: string;
+    entityKind: string;
+    entityNamespace?: string;
+  }>({
+    id: "enhanced:createEntityRef",
+    description:
+      "Create entity reference from unique identifier - no catalog API needed",
+    schema: {
+      input: {
+        type: "object",
+        required: ["combinedValue", "entityKind"],
+        properties: {
+          combinedValue: {
+            type: "string",
+            title: "Combined Value",
+            description: "Combined value from EnhancedEntityPicker (displayValue\\nEntity Name: uniqueValue)",
+          },
+          entityKind: {
+            type: "string",
+            title: "Entity Kind",
+            description: "Kind of entity (User, Component, Group, etc.)",
+          },
+          entityNamespace: {
+            type: "string",
+            title: "Entity Namespace",
+            description: "Entity namespace (defaults to 'default')",
+            default: "default",
+          },
+        },
+      },
+      output: {
+        type: "object",
+        properties: {
+          entityRef: {
+            type: "string",
+            title: "Entity Reference",
+            description: "Entity reference for use with catalog:fetch",
+          },
+          displayValue: {
+            type: "string",
+            title: "Display Value",
+            description: "Clean display value (what user saw)",
+          },
+          uniqueValue: {
+            type: "string",
+            title: "Unique Value", 
+            description: "Unique identifier value used for resolution",
+          },
+        },
+      },
+    },
+    async handler(ctx: any) {
+      const {
+        combinedValue,
+        entityKind,
+        entityNamespace = "default",
+      } = ctx.input;
+
+      try {
+        ctx.logger.info(`Creating entityRef from: "${combinedValue}"`);
+
+        // Parse the combined value: "displayValue\nEntity Name: uniqueValue"
+        const lines = combinedValue.split('\n');
+        
+        if (lines.length !== 2 || !lines[1].startsWith('Entity Name: ')) {
+          throw new Error(
+            `Invalid combined value format. Expected "displayValue\\nEntity Name: uniqueValue", ` +
+            `got: "${combinedValue}"`
+          );
+        }
+
+        const displayValue = lines[0];
+        const uniqueValue = lines[1].replace('Entity Name: ', '');
+        
+        ctx.logger.info(`Display value: "${displayValue}"`);
+        ctx.logger.info(`Unique value: "${uniqueValue}"`);
+
+        // Create entityRef using the unique value as the entity name
+        // Format: kind:namespace/name
+        const entityRef = `${entityKind.toLowerCase()}:${entityNamespace}/${uniqueValue}`;
+
+        ctx.logger.info(`Created entityRef: ${entityRef}`);
+
+        // Output the results
+        ctx.output("entityRef", entityRef);
+        ctx.output("displayValue", displayValue);
+        ctx.output("uniqueValue", uniqueValue);
+
+      } catch (error: any) {
+        ctx.logger.error(`EntityRef creation failed: ${error.message}`);
+        throw new Error(`Failed to create entity reference: ${error.message}`);
+      }
+    },
+  });
 };
 
 
