@@ -101,7 +101,7 @@ export const EnhancedEntityPicker = ({
         const displayValue = lines[0];
         const uniqueValue = lines[1].replace('Entity Name: ', '');
         const found = entities.find((entity) => {
-          const entityUniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity);
+          const entityUniqueValue = formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", entity);
           return entityUniqueValue === uniqueValue;
         });
         setSelectedEntity(found || null);
@@ -122,7 +122,7 @@ export const EnhancedEntityPicker = ({
   const handleChange = (event: any, newValue: Entity | null) => {
     if (newValue) {
       const displayValue = formatEntityDisplay(displayTemplate, newValue);
-      const uniqueValue = formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, newValue);
+      const uniqueValue = formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", newValue);
       
       // 🎯 Store in a clean, user-friendly format for review page
       // Format: "Display Value\nEntity Name: uniqueValue"
@@ -148,7 +148,7 @@ export const EnhancedEntityPicker = ({
     .map((entity) => ({
       entity,
       displayText: formatEntityDisplay(displayTemplate, entity),
-      uniqueValue: formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, entity),
+      uniqueValue: formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", entity),
       entityRef: stringifyEntityRef(entity),
     }))
     .filter((option) => option.displayText && option.displayText.trim() !== "");
@@ -208,7 +208,7 @@ export const EnhancedEntityPicker = ({
             <div>
               ✅ Display: {formatEntityDisplay(displayTemplate, selectedEntity)}
               <br />
-              🔑 Unique: {formatEntityDisplay(`${{ ${uniqueIdentifierTemplate} }}`, selectedEntity)}
+              🔑 Unique: {formatEntityDisplay("${{ " + uniqueIdentifierTemplate + " }}", selectedEntity)}
             </div>
           )}
         </Box>
