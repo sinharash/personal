@@ -106,10 +106,11 @@ export const EnhancedEntityPicker = ({
         });
         setSelectedEntity(found || null);
       } else {
-        // Fallback: try to match by display value
+        // Fallback: try to match by display value (for cases where format doesn't match)
+        const displayValueToMatch = lines.length > 1 ? lines[0] : formData;
         const found = entities.find((entity) => {
           const displayValue = formatEntityDisplay(displayTemplate, entity);
-          return displayValue === formData;
+          return displayValue === displayValueToMatch;
         });
         setSelectedEntity(found || null);
       }
