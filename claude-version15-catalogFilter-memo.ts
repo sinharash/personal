@@ -71,14 +71,18 @@ export const EnhancedEntityPicker = ({
   disabled,
   formContext,
 }: EnhancedEntityPickerProps) => {
+  const { notify } = useNotify();
   const catalogApi = useApi(catalogApiRef);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
 
+  // Extract complex expression to satisfy ESLint rule
+  const catalogFilterFromSchema = uiSchema?.["ui:options"]?.catalogFilter;
+  
   // ✅ useMemo is correct here - maintains referential equality to prevent unnecessary API calls
   const catalogFilter = useMemo(() => {
-    const filter = uiSchema?.["ui:options"]?.catalogFilter;
+    const filter = catalogFilterFromSchema;
 
     if (
       !filter ||
@@ -89,7 +93,7 @@ export const EnhancedEntityPicker = ({
     }
 
     return filter;
-  }, [uiSchema?.["ui:options"]?.catalogFilter]);
+  }, [catalogFilterFromSchema]);
 
   const hiddenFieldName = useMemo(() => {
     const fieldName = uiSchema?.["ui:options"]?.hiddenFieldName;
@@ -127,11 +131,16 @@ export const EnhancedEntityPicker = ({
       const response = await catalogApi.getEntities({ filter });
       setEntities(response.items);
     } catch (error) {
-      setEntities([]);
+      const err = error as Error;
+      notify({
+        severity: 'error',
+        error: new Error(`Failed to get entities - ${err.message}`),
+      });
+      setEntities([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
-  }, [catalogApi, catalogFilter]); // catalogFilter dependency is why useMemo matters!
+  }, [catalogApi, catalogFilter, notify]); // Added notify dependency
 
   useEffect(() => {
     fetchEntities();
