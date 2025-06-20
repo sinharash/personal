@@ -77,8 +77,9 @@ export const EnhancedEntityPicker = ({
   const [loading, setLoading] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
 
-  // Extract complex expression to satisfy ESLint rule
-  const catalogFilterFromSchema = uiSchema?.["ui:options"]?.catalogFilter;
+  // Extract all uiSchema accesses to satisfy ESLint
+  const uiOptions = uiSchema?.["ui:options"];
+  const catalogFilterFromSchema = uiOptions?.catalogFilter;
   
   // ✅ useMemo is correct here - maintains referential equality to prevent unnecessary API calls
   const catalogFilter = useMemo(() => {
@@ -95,23 +96,13 @@ export const EnhancedEntityPicker = ({
     return filter;
   }, [catalogFilterFromSchema]);
 
-  const hiddenFieldName = useMemo(() => {
-    const fieldName = uiSchema?.["ui:options"]?.hiddenFieldName;
-    if (!fieldName) {
-      throw new Error(`hiddenFieldName is required in ui:options!`);
-    }
-    return fieldName;
-  }, [uiSchema?.["ui:options"]?.hiddenFieldName]);
+  const hiddenFieldName = uiOptions?.hiddenFieldName || "selectedEntityName";
 
-  const displayTemplate =
-    uiSchema?.["ui:options"]?.displayEntityFieldAfterFormatting ||
-    "{{ metadata.title || metadata.name }}";
+  const displayTemplate = uiOptions?.displayEntityFieldAfterFormatting || "{{ metadata.title || metadata.name }}";
 
-  const uniqueIdentifierField =
-    uiSchema?.["ui:options"]?.uniqueIdentifierField || "metadata.name";
+  const uniqueIdentifierField = uiOptions?.uniqueIdentifierField || "metadata.name";
 
-  const placeholder =
-    uiSchema?.["ui:options"]?.placeholder || "Select an entity...";
+  const placeholder = uiOptions?.placeholder || "Select an entity...";
 
   // Fetch entities from Backstage catalog
   const fetchEntities = useCallback(async () => {
