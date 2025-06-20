@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { Autocomplete, TextField, Box } from "@mui/material";
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
+import Box from "@mui/material/Box";
 import { useApi } from "@backstage/core-plugin-api";
 import { catalogApiRef } from "@backstage/plugin-catalog-react";
 import { Entity, stringifyEntityRef } from "@backstage/catalog-model";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
+import { useNotify } from '../hooks/use-notify';
 
 interface CatalogFilter {
   kind?: string;
