@@ -72,7 +72,7 @@ func getTerraformTool(cmd *cobra.Command) string {
 After fixing thinking that calledAs not working 
 
 // getTerraformTool detects which tool to use based on os.Args since CalledAs() doesn't work
-func getTerraformTool(cmd *cobra.Command) string {
+func getTerraformTool() string {
 	// Since CalledAs() is not working properly, parse os.Args directly
 	if len(os.Args) >= 2 {
 		// os.Args[0] = binary path
@@ -119,7 +119,7 @@ func execute(cmd *cobra.Command, flags *Flags) {
 	}
 
 	// Get the tool that user intended to use
-	tool := getTerraformTool(cmd)
+	tool := getTerraformTool()  // Removed cmd parameter
 	
 	// Get the command name from os.Args for display
 	commandUsed := "unknown"
