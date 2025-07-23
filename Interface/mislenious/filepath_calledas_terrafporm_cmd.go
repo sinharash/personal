@@ -253,3 +253,148 @@ func isVersionLessThan(version1, version2 string) bool {
 
 	return len(v1) < len(v2)
 }
+
+
+>>>>>>>>>>>>
+gemini rashmi calledAs way 
+
+cmd.go where use terraform 
+update the terraform command definition. You'll use PersistentPreRunE to capture the alias and inject it into the context.
+
+// In cmd/cmd.go
+
+import (
+	"context" // <-- Add this import
+	"github.com/spf13/cobra"
+	"YOUR_PROJECT_PATH/cmd/terraform/configure"
+	"YOUR_PROJECT_PATH/cmd/terraform/lock"
+)
+
+// Define your context key here or import it
+type contextKey string
+const iacToolKey contextKey = "iacTool"
+
+func Cmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "terraform",
+		Aliases: []string{"tf", "tofu"},
+		Short:   "Runs terraform or opentofu utility commands",
+		// This hook runs BEFORE any child command's RunE function.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			executable := "terraform" // Default
+			if cmd.CalledAs() == "tofu" {
+				executable = "tofu"
+			}
+			
+			// Create a new context containing the executable name
+			ctx := context.WithValue(cmd.Context(), iacToolKey, executable)
+			
+			// Set the new context on the command, so children can access it
+			cmd.SetContext(ctx)
+			
+			return nil
+		},
+	}
+
+	cmd.AddCommand(configure.Cmd())
+	cmd.AddCommand(lock.Cmd())
+	// ... other subcommands
+
+	return cmd
+}
+
+then 
+Your pkg/terraform package now becomes much simpler. The functions no longer need to figure out the executable; they just receive it as an argument. This also makes them much easier to test in isolation.
+
+// In pkg/terraform/terraform.go
+
+// No more IacTool struct or NewIacTool function needed.
+
+// RunInit simply accepts the executable string.
+func RunInit(executable string) error {
+	core.InfoMsgf("Running %s init...", executable)
+	cmd := exec.Command(executable, "init", "-backend=false")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("%s init failed: %w", executable, err)
+	}
+	core.OkayMsgf("%s init complete.", executable)
+	return nil
+}
+
+// IsLockFileSupported also accepts the executable string.
+func IsLockFileSupported(executable string) (bool, error) {
+    // ... logic is the same as before, but uses the 'executable' parameter ...
+}
+then 
+tep 4: Update the Child Command (cmd/terraform/lock/cmd.go)
+Finally, update the lock command to read the executable from the context. To do this, you'll need to change your execute function to accept the *cobra.Command object from the Run function.
+//In cmd/terraform/lock/cmd.go
+
+// Use RunE for better error handling. It allows returning an error.
+func Cmd() *cobra.Command {
+	flags := &flags{}
+	cmd := &cobra.Command{
+		Use:   "lock",
+		Short: "Generates the .terraform.lock.hcl file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get the executable from the context set by the parent.
+			executable, ok := cmd.Context().Value(iacToolKey).(string)
+			if !ok {
+				// This should not happen if PersistentPreRunE is set up correctly
+				return fmt.Errorf("could not determine terraform/tofu executable from context")
+			}
+			
+			return execute(flags, executable)
+		},
+	}
+	// ... your flag setup ...
+	return cmd
+}
+
+// execute now receives the executable string directly.
+func execute(flags *flags, executable string) error {
+	core.InfoMsgf("Using tool: %s", executable)
+
+	supported, err := lt.IsLockFileSupported(executable)
+	if err != nil {
+		return err // Return the error to RunE
+	}
+	// ...
+
+	// Call the simplified package function
+	if err := lt.RunInit(executable); err != nil {
+		return err
+	}
+
+	// ...
+	
+	// Pass the executable to the generator
+	if err := generateIacLock(executable); err != nil {
+		return err
+	}
+
+	core.OkayMsg("Successfully generated terraform lock file.")
+	return nil
+}
+
+// generateIacLock is also simplified.
+func generateIacLock(executable string) error {
+	core.InfoMsg("Generating providers lock file...")
+	cmd := exec.Command(executable, "providers", "lock", "-platform=linux_amd64")
+	// ...
+	return cmd.Run()
+}
+
+By adopting this context-based pattern:
+
+Clear Responsibility: The parent command is responsible for figuring out the context (terraform vs. tofu), and the child command is responsible for executing the action.
+
+No Globals or Hacks: You are not relying on os.Args or global variables. State is passed cleanly through the official, recommended channel.
+
+More Testable: Your pkg/terraform functions are now pure functions that can be tested easily by just passing "terraform" or "tofu" as an argument.
+
+Scalable: As you add more subcommands (apply, plan), they can all follow the same pattern of reading the executable from the context without duplicating logic.
