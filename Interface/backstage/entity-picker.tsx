@@ -103,30 +103,41 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
 
 // Build filter query with proper type safety
 const buildFilterQuery = (
-  catalogFilter: CatalogFilterOptions
+  catalogFilter: CatalogFilterOptions | null | undefined,
+  defaultKind?: string,
+  defaultNamespace?: string
 ): EntityFilterQuery => {
   const query: EntityFilterQuery = {};
 
-  if (!catalogFilter || typeof catalogFilter !== "object") {
-    return query;
+  // Add default kind if provided and no kind in catalogFilter
+  if (defaultKind && (!catalogFilter || !catalogFilter.kind)) {
+    query.kind = defaultKind;
   }
 
-  // Handle kind filter
-  if (catalogFilter.kind) {
-    query.kind = catalogFilter.kind;
+  // Add default namespace if provided
+  if (defaultNamespace) {
+    query["metadata.namespace"] = defaultNamespace;
   }
 
-  // Handle type filter (goes to spec.type)
-  if (catalogFilter.type) {
-    query["spec.type"] = catalogFilter.type;
-  }
-
-  // Handle other filters
-  Object.entries(catalogFilter).forEach(([key, value]) => {
-    if (key !== "kind" && key !== "type" && value !== undefined) {
-      query[key] = value;
+  // Handle catalogFilter if it exists and is an object
+  if (catalogFilter && typeof catalogFilter === "object") {
+    // Handle kind filter
+    if (catalogFilter.kind) {
+      query.kind = catalogFilter.kind;
     }
-  });
+
+    // Handle type filter (goes to spec.type)
+    if (catalogFilter.type) {
+      query["spec.type"] = catalogFilter.type;
+    }
+
+    // Handle other filters
+    Object.entries(catalogFilter).forEach(([key, value]) => {
+      if (key !== "kind" && key !== "type" && value !== undefined) {
+        query[key] = value;
+      }
+    });
+  }
 
   return query;
 };
@@ -149,6 +160,7 @@ export const EnhancedEntityPicker = (
     formContext,
     required = false,
     rawErrors = [],
+    disabled = false,
     ...restProps
   } = props;
 
@@ -159,7 +171,7 @@ export const EnhancedEntityPicker = (
   const uiOptions = uiSchema["ui:options"] || {};
   const {
     displayEntityFieldAfterFormatting,
-    catalogFilter = {} as CatalogFilterOptions,
+    catalogFilter,
     uniqueIdentifierField = "metadata.name",
     defaultKind = "Component",
     defaultNamespace = "default",
@@ -168,10 +180,14 @@ export const EnhancedEntityPicker = (
     placeholder = "Select an entity...",
   } = uiOptions;
 
-  // Build entity filter query with type safety
+  // Build entity filter query with type safety and use defaultKind/defaultNamespace
   const filterQuery = useMemo(() => {
-    return buildFilterQuery(catalogFilter);
-  }, [catalogFilter]);
+    return buildFilterQuery(
+      catalogFilter as CatalogFilterOptions | null | undefined,
+      defaultKind,
+      defaultNamespace
+    );
+  }, [catalogFilter, defaultKind, defaultNamespace]);
 
   // Fetch entities from catalog
   const { value: entities = [], loading } = useAsync(async () => {
@@ -194,7 +210,8 @@ export const EnhancedEntityPicker = (
       entities.find((entity) => {
         const entityRef = stringifyEntityRef(entity);
         const customRef = getNestedValue(entity, uniqueIdentifierField);
-        return entityRef === formData || customRef === formData;
+        const customRefString = customRef ? String(customRef) : null;
+        return entityRef === formData || customRefString === formData;
       }) || null
     );
   }, [formData, entities, uniqueIdentifierField]);
@@ -223,7 +240,10 @@ export const EnhancedEntityPicker = (
       // Store entity reference in hidden field if configured
       if (hiddenFieldName && formContext?.formData) {
         try {
-          formContext.formData[hiddenFieldName] = stringifyEntityRef(value);
+          const entityRef = stringifyEntityRef(value);
+          if (entityRef) {
+            formContext.formData[hiddenFieldName] = entityRef;
+          }
         } catch (error) {
           console.warn("Failed to store entity reference:", error);
         }
@@ -237,16 +257,19 @@ export const EnhancedEntityPicker = (
     (event: React.SyntheticEvent, value: string) => {
       setInputValue(value);
 
-      if (
-        allowArbitraryValues &&
-        value &&
-        !entities.find(
-          (e) =>
-            formatDisplayValue(displayEntityFieldAfterFormatting || "", e) ===
-            value
-        )
-      ) {
-        onChange(value);
+      if (allowArbitraryValues && value) {
+        // Check if the input value matches any existing entity display value
+        const matchesExistingEntity = entities.some((e) => {
+          const displayValue = formatDisplayValue(
+            displayEntityFieldAfterFormatting || "",
+            e
+          );
+          return displayValue === value;
+        });
+
+        if (!matchesExistingEntity) {
+          onChange(value);
+        }
       }
     },
     [
@@ -257,7 +280,7 @@ export const EnhancedEntityPicker = (
     ]
   );
 
-  // Custom option label formatter
+  // Custom option label formatter with proper type handling
   const getOptionLabel = useCallback(
     (option: Entity | string) => {
       // Handle string values (for arbitrary input)
@@ -276,12 +299,15 @@ export const EnhancedEntityPicker = (
 
   return (
     <Autocomplete
+      {...restProps}
       options={entities}
       value={selectedEntity}
+      inputValue={inputValue}
       onChange={handleChange}
       onInputChange={handleInputChange}
       getOptionLabel={getOptionLabel}
       loading={loading}
+      disabled={disabled}
       freeSolo={allowArbitraryValues}
       renderInput={(params) => (
         <TextField
