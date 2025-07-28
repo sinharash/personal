@@ -161,7 +161,6 @@ export const EnhancedEntityPicker = (
     required = false,
     rawErrors = [],
     disabled = false,
-    ...restProps
   } = props;
 
   const catalogApi = useApi(catalogApiRef);
@@ -216,15 +215,25 @@ export const EnhancedEntityPicker = (
     );
   }, [formData, entities, uniqueIdentifierField]);
 
-  // Enhanced onChange handler
+  // Enhanced onChange handler with correct MUI signature
   const handleChange = useCallback(
-    async (event: React.SyntheticEvent, value: Entity | null) => {
+    (
+      event: React.SyntheticEvent,
+      value: Entity | string | null,
+      reason: string
+    ) => {
       if (!value) {
         onChange("");
         return;
       }
 
-      // Determine the value to store based on uniqueIdentifierField
+      // Handle string values (for freeSolo/arbitrary input)
+      if (typeof value === "string") {
+        onChange(value);
+        return;
+      }
+
+      // Handle Entity objects
       let entityValue: string;
       if (uniqueIdentifierField !== "metadata.name") {
         const customValue = getNestedValue(value, uniqueIdentifierField);
@@ -252,12 +261,12 @@ export const EnhancedEntityPicker = (
     [onChange, uniqueIdentifierField, hiddenFieldName, formContext]
   );
 
-  // Handle input change for free text input
+  // Handle input change for free text input with correct signature
   const handleInputChange = useCallback(
-    (event: React.SyntheticEvent, value: string) => {
+    (event: React.SyntheticEvent, value: string, reason: string) => {
       setInputValue(value);
 
-      if (allowArbitraryValues && value) {
+      if (allowArbitraryValues && value && reason === "input") {
         // Check if the input value matches any existing entity display value
         const matchesExistingEntity = entities.some((e) => {
           const displayValue = formatDisplayValue(
@@ -297,15 +306,41 @@ export const EnhancedEntityPicker = (
     [displayEntityFieldAfterFormatting]
   );
 
+  // Determine if option is equal to value (for selection highlighting)
+  const isOptionEqualToValue = useCallback(
+    (option: Entity | string, value: Entity | string) => {
+      if (typeof option === "string" && typeof value === "string") {
+        return option === value;
+      }
+      if (typeof option === "object" && typeof value === "object") {
+        return stringifyEntityRef(option) === stringifyEntityRef(value);
+      }
+      if (typeof option === "object" && typeof value === "string") {
+        return (
+          stringifyEntityRef(option) === value ||
+          getOptionLabel(option) === value
+        );
+      }
+      if (typeof option === "string" && typeof value === "object") {
+        return (
+          option === stringifyEntityRef(value) ||
+          option === getOptionLabel(value)
+        );
+      }
+      return false;
+    },
+    [getOptionLabel]
+  );
+
   return (
-    <Autocomplete
-      {...restProps}
+    <Autocomplete<Entity | string, false, boolean, boolean>
       options={entities}
       value={selectedEntity}
       inputValue={inputValue}
       onChange={handleChange}
       onInputChange={handleInputChange}
       getOptionLabel={getOptionLabel}
+      isOptionEqualToValue={isOptionEqualToValue}
       loading={loading}
       disabled={disabled}
       freeSolo={allowArbitraryValues}
@@ -322,8 +357,15 @@ export const EnhancedEntityPicker = (
         />
       )}
       renderOption={(props, entity) => (
-        <li {...props}>
-          <EntityDisplayName entityRef={stringifyEntityRef(entity)} />
+        <li
+          {...props}
+          key={typeof entity === "string" ? entity : stringifyEntityRef(entity)}
+        >
+          {typeof entity === "string" ? (
+            entity
+          ) : (
+            <EntityDisplayName entityRef={stringifyEntityRef(entity)} />
+          )}
         </li>
       )}
     />
