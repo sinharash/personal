@@ -1,17 +1,21 @@
-import React, { useCallback, useMemo, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { useApi } from "@backstage/core-plugin-api";
 import {
   catalogApiRef,
   EntityDisplayName,
 } from "@backstage/plugin-catalog-react";
-import {
-  Entity,
-  stringifyEntityRef,
-  parseEntityRef,
-} from "@backstage/catalog-model";
-import { TextField, Autocomplete } from "@material-ui/core";
+import { Entity, stringifyEntityRef } from "@backstage/catalog-model";
+import { TextField, Autocomplete } from "@mui/material";
 import useAsync from "react-use/esm/useAsync";
+import { EntityFilterQuery } from "@backstage/catalog-client";
+
+// Define the catalog filter interface for better type safety
+interface CatalogFilterOptions {
+  kind?: string | string[];
+  type?: string | string[];
+  [key: string]: string | string[] | number | boolean | undefined;
+}
 
 // Schema definition for the field extension
 export const EnhancedEntityPickerSchema = {
@@ -59,18 +63,22 @@ export const EnhancedEntityPickerSchema = {
   },
 };
 
-// Utility functions
+// Utility functions with better type safety
 const getNestedValue = (obj: any, path: string): any => {
+  if (!obj || !path) return undefined;
   try {
-    return path.split(".").reduce((current, key) => current?.[key], obj);
+    return path.split(".").reduce((current, key) => {
+      return current && typeof current === "object" ? current[key] : undefined;
+    }, obj);
   } catch {
     return undefined;
   }
 };
 
 const formatDisplayValue = (template: string, entity: Entity): string => {
-  if (!template || !entity)
+  if (!template || !entity) {
     return entity?.metadata?.title || entity?.metadata?.name || "";
+  }
 
   try {
     // Handle fallback syntax: "property1 || property2"
@@ -78,7 +86,7 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
       const paths = template.split(" || ").map((p) => p.trim());
       for (const path of paths) {
         const value = getNestedValue(entity, path);
-        if (value) return String(value);
+        if (value && String(value).trim()) return String(value);
       }
       return entity?.metadata?.name || "";
     }
@@ -91,6 +99,36 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
   } catch {
     return entity?.metadata?.name || "";
   }
+};
+
+// Build filter query with proper type safety
+const buildFilterQuery = (
+  catalogFilter: CatalogFilterOptions
+): EntityFilterQuery => {
+  const query: EntityFilterQuery = {};
+
+  if (!catalogFilter || typeof catalogFilter !== "object") {
+    return query;
+  }
+
+  // Handle kind filter
+  if (catalogFilter.kind) {
+    query.kind = catalogFilter.kind;
+  }
+
+  // Handle type filter (goes to spec.type)
+  if (catalogFilter.type) {
+    query["spec.type"] = catalogFilter.type;
+  }
+
+  // Handle other filters
+  Object.entries(catalogFilter).forEach(([key, value]) => {
+    if (key !== "kind" && key !== "type" && value !== undefined) {
+      query[key] = value;
+    }
+  });
+
+  return query;
 };
 
 /**
@@ -117,11 +155,11 @@ export const EnhancedEntityPicker = (
   const catalogApi = useApi(catalogApiRef);
   const [inputValue, setInputValue] = useState("");
 
-  // Extract UI options
+  // Extract UI options with proper defaults and type safety
   const uiOptions = uiSchema["ui:options"] || {};
   const {
     displayEntityFieldAfterFormatting,
-    catalogFilter = {},
+    catalogFilter = {} as CatalogFilterOptions,
     uniqueIdentifierField = "metadata.name",
     defaultKind = "Component",
     defaultNamespace = "default",
@@ -130,28 +168,9 @@ export const EnhancedEntityPicker = (
     placeholder = "Select an entity...",
   } = uiOptions;
 
-  // Build entity filter query
+  // Build entity filter query with type safety
   const filterQuery = useMemo(() => {
-    const query: any = {};
-
-    // Add kind filter
-    if (catalogFilter.kind) {
-      query.kind = catalogFilter.kind;
-    }
-
-    // Add type filter
-    if (catalogFilter.type) {
-      query["spec.type"] = catalogFilter.type;
-    }
-
-    // Add any other filters
-    Object.keys(catalogFilter).forEach((key) => {
-      if (key !== "kind" && key !== "type") {
-        query[key] = catalogFilter[key];
-      }
-    });
-
-    return query;
+    return buildFilterQuery(catalogFilter);
   }, [catalogFilter]);
 
   // Fetch entities from catalog
@@ -160,27 +179,29 @@ export const EnhancedEntityPicker = (
       const response = await catalogApi.getEntities({
         filter: filterQuery,
       });
-      return response.items;
+      return response.items || [];
     } catch (error) {
       console.error("Failed to fetch entities:", error);
       return [];
     }
   }, [catalogApi, filterQuery]);
 
-  // Find selected entity
+  // Find selected entity with null safety
   const selectedEntity = useMemo(() => {
     if (!formData || !entities.length) return null;
 
-    return entities.find((entity) => {
-      const entityRef = stringifyEntityRef(entity);
-      const customRef = getNestedValue(entity, uniqueIdentifierField);
-      return entityRef === formData || customRef === formData;
-    });
+    return (
+      entities.find((entity) => {
+        const entityRef = stringifyEntityRef(entity);
+        const customRef = getNestedValue(entity, uniqueIdentifierField);
+        return entityRef === formData || customRef === formData;
+      }) || null
+    );
   }, [formData, entities, uniqueIdentifierField]);
 
   // Enhanced onChange handler
   const handleChange = useCallback(
-    async (event: any, value: Entity | null) => {
+    async (event: React.SyntheticEvent, value: Entity | null) => {
       if (!value) {
         onChange("");
         return;
@@ -190,7 +211,9 @@ export const EnhancedEntityPicker = (
       let entityValue: string;
       if (uniqueIdentifierField !== "metadata.name") {
         const customValue = getNestedValue(value, uniqueIdentifierField);
-        entityValue = customValue || stringifyEntityRef(value);
+        entityValue = customValue
+          ? String(customValue)
+          : stringifyEntityRef(value);
       } else {
         entityValue = stringifyEntityRef(value);
       }
@@ -211,11 +234,12 @@ export const EnhancedEntityPicker = (
 
   // Handle input change for free text input
   const handleInputChange = useCallback(
-    (event: any, value: string) => {
+    (event: React.SyntheticEvent, value: string) => {
       setInputValue(value);
 
       if (
         allowArbitraryValues &&
+        value &&
         !entities.find(
           (e) =>
             formatDisplayValue(displayEntityFieldAfterFormatting || "", e) ===
@@ -235,7 +259,13 @@ export const EnhancedEntityPicker = (
 
   // Custom option label formatter
   const getOptionLabel = useCallback(
-    (option: Entity) => {
+    (option: Entity | string) => {
+      // Handle string values (for arbitrary input)
+      if (typeof option === "string") {
+        return option;
+      }
+
+      // Handle Entity objects
       if (displayEntityFieldAfterFormatting) {
         return formatDisplayValue(displayEntityFieldAfterFormatting, option);
       }
@@ -246,7 +276,6 @@ export const EnhancedEntityPicker = (
 
   return (
     <Autocomplete
-      {...restProps}
       options={entities}
       value={selectedEntity}
       onChange={handleChange}
@@ -266,10 +295,10 @@ export const EnhancedEntityPicker = (
           margin="normal"
         />
       )}
-      renderOption={(entity) => (
-        <div>
+      renderOption={(props, entity) => (
+        <li {...props}>
           <EntityDisplayName entityRef={stringifyEntityRef(entity)} />
-        </div>
+        </li>
       )}
     />
   );
