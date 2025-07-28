@@ -10,17 +10,6 @@ import { TextField, Autocomplete } from "@mui/material";
 import useAsync from "react-use/esm/useAsync";
 import { EntityFilterQuery } from "@backstage/catalog-client";
 
-// Define the catalog filter interface to match EntityFilterQuery requirements
-interface CatalogFilterOptions {
-  kind?: string | string[];
-  type?: string | string[];
-  "metadata.namespace"?: string | string[];
-  "metadata.name"?: string | string[];
-  "spec.type"?: string | string[];
-  "spec.lifecycle"?: string | string[];
-  [key: string]: string | string[] | undefined;
-}
-
 // Schema definition for the field extension
 export const EnhancedEntityPickerSchema = {
   uiOptions: {
@@ -67,6 +56,18 @@ export const EnhancedEntityPickerSchema = {
   },
 };
 
+// Type for UI options
+interface UIOptions {
+  displayEntityFieldAfterFormatting?: string;
+  catalogFilter?: Record<string, any>;
+  uniqueIdentifierField?: string;
+  defaultKind?: string;
+  defaultNamespace?: string;
+  allowArbitraryValues?: boolean;
+  hiddenFieldName?: string;
+  placeholder?: string;
+}
+
 // Utility functions with better type safety
 const getNestedValue = (obj: any, path: string): any => {
   if (!obj || !path) return undefined;
@@ -107,70 +108,93 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
 
 // Build filter query with proper type safety
 const buildFilterQuery = (
-  catalogFilter: Record<string, any> | null | undefined,
-  defaultKind?: string,
-  defaultNamespace?: string
+  catalogFilter: Record<string, any> | undefined,
+  defaultKind: string,
+  defaultNamespace: string
 ): EntityFilterQuery => {
   const query: EntityFilterQuery = {};
 
-  // Add default kind if provided and no kind in catalogFilter
-  if (defaultKind && (!catalogFilter || !catalogFilter.kind)) {
+  // Add default kind if no kind in catalogFilter
+  if (!catalogFilter || !catalogFilter.kind) {
     query.kind = defaultKind;
   }
 
-  // Add default namespace if provided
-  if (defaultNamespace) {
-    query["metadata.namespace"] = defaultNamespace;
-  }
+  // Add default namespace
+  query["metadata.namespace"] = defaultNamespace;
 
-  // Handle catalogFilter if it exists and is an object
+  // Handle catalogFilter if it exists
   if (catalogFilter && typeof catalogFilter === "object") {
-    // Handle known filter fields with proper type conversion
-    const filterEntries = Object.entries(catalogFilter);
+    Object.entries(catalogFilter).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
 
-    for (const [key, value] of filterEntries) {
-      if (value === undefined || value === null) continue;
-
-      // Convert value to proper type for EntityFilterQuery
+      // Convert value to string or string array
       let filterValue: string | string[];
-
       if (Array.isArray(value)) {
         filterValue = value.map((v) => String(v));
       } else {
         filterValue = String(value);
       }
 
-      // Map common filter keys
-      switch (key) {
-        case "kind":
-          query.kind = filterValue;
-          break;
-        case "type":
-          query["spec.type"] = filterValue;
-          break;
-        case "namespace":
-          query["metadata.namespace"] = filterValue;
-          break;
-        default:
-          // For other keys, use them as-is if they're valid EntityFilterQuery keys
-          if (
-            key.includes(".") ||
-            [
-              "kind",
-              "metadata.namespace",
-              "metadata.name",
-              "spec.type",
-              "spec.lifecycle",
-            ].includes(key)
-          ) {
-            (query as any)[key] = filterValue;
-          }
-          break;
+      // Map known filter keys
+      if (key === "kind") {
+        query.kind = filterValue;
+      } else if (key === "type") {
+        query["spec.type"] = filterValue;
+      } else if (key === "namespace") {
+        query["metadata.namespace"] = filterValue;
+      } else if (
+        key.startsWith("metadata.") ||
+        key.startsWith("spec.") ||
+        key === "kind"
+      ) {
+        // Only allow known entity filter paths
+        (query as Record<string, string | string[]>)[key] = filterValue;
       }
-    }
+    });
   }
 
   return query;
+};
+
+// Safe UI options extraction with type checking
+const extractUIOptions = (uiSchema: any): UIOptions => {
+  const options = uiSchema?.["ui:options"] || {};
+
+  return {
+    displayEntityFieldAfterFormatting:
+      typeof options.displayEntityFieldAfterFormatting === "string"
+        ? options.displayEntityFieldAfterFormatting
+        : undefined,
+    catalogFilter:
+      typeof options.catalogFilter === "object" &&
+      options.catalogFilter !== null
+        ? options.catalogFilter
+        : undefined,
+    uniqueIdentifierField:
+      typeof options.uniqueIdentifierField === "string"
+        ? options.uniqueIdentifierField
+        : "metadata.name",
+    defaultKind:
+      typeof options.defaultKind === "string"
+        ? options.defaultKind
+        : "Component",
+    defaultNamespace:
+      typeof options.defaultNamespace === "string"
+        ? options.defaultNamespace
+        : "default",
+    allowArbitraryValues:
+      typeof options.allowArbitraryValues === "boolean"
+        ? options.allowArbitraryValues
+        : true,
+    hiddenFieldName:
+      typeof options.hiddenFieldName === "string"
+        ? options.hiddenFieldName
+        : undefined,
+    placeholder:
+      typeof options.placeholder === "string"
+        ? options.placeholder
+        : "Select an entity...",
+  };
 };
 
 /**
@@ -197,26 +221,21 @@ export const EnhancedEntityPicker = (
   const catalogApi = useApi(catalogApiRef);
   const [inputValue, setInputValue] = useState("");
 
-  // Extract UI options with proper defaults and type safety
-  const uiOptions = uiSchema["ui:options"] || {};
+  // Extract UI options with proper type safety
   const {
     displayEntityFieldAfterFormatting,
     catalogFilter,
-    uniqueIdentifierField = "metadata.name",
-    defaultKind = "Component",
-    defaultNamespace = "default",
-    allowArbitraryValues = true,
+    uniqueIdentifierField,
+    defaultKind,
+    defaultNamespace,
+    allowArbitraryValues,
     hiddenFieldName,
-    placeholder = "Select an entity...",
-  } = uiOptions;
+    placeholder,
+  } = extractUIOptions(uiSchema);
 
   // Build entity filter query with type safety
   const filterQuery = useMemo(() => {
-    return buildFilterQuery(
-      catalogFilter as Record<string, any> | null | undefined,
-      defaultKind,
-      defaultNamespace
-    );
+    return buildFilterQuery(catalogFilter, defaultKind!, defaultNamespace!);
   }, [catalogFilter, defaultKind, defaultNamespace]);
 
   // Fetch entities from catalog
@@ -239,7 +258,7 @@ export const EnhancedEntityPicker = (
     return (
       entities.find((entity) => {
         const entityRef = stringifyEntityRef(entity);
-        const customRef = getNestedValue(entity, uniqueIdentifierField);
+        const customRef = getNestedValue(entity, uniqueIdentifierField!);
         const customRefString = customRef ? String(customRef) : null;
         return entityRef === formData || customRefString === formData;
       }) || null
@@ -267,7 +286,7 @@ export const EnhancedEntityPicker = (
       // Handle Entity objects
       let entityValue: string;
       if (uniqueIdentifierField !== "metadata.name") {
-        const customValue = getNestedValue(value, uniqueIdentifierField);
+        const customValue = getNestedValue(value, uniqueIdentifierField!);
         entityValue = customValue
           ? String(customValue)
           : stringifyEntityRef(value);
