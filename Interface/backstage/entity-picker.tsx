@@ -10,11 +10,15 @@ import { TextField, Autocomplete } from "@mui/material";
 import useAsync from "react-use/esm/useAsync";
 import { EntityFilterQuery } from "@backstage/catalog-client";
 
-// Define the catalog filter interface for better type safety
+// Define the catalog filter interface to match EntityFilterQuery requirements
 interface CatalogFilterOptions {
   kind?: string | string[];
   type?: string | string[];
-  [key: string]: string | string[] | number | boolean | undefined;
+  "metadata.namespace"?: string | string[];
+  "metadata.name"?: string | string[];
+  "spec.type"?: string | string[];
+  "spec.lifecycle"?: string | string[];
+  [key: string]: string | string[] | undefined;
 }
 
 // Schema definition for the field extension
@@ -103,7 +107,7 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
 
 // Build filter query with proper type safety
 const buildFilterQuery = (
-  catalogFilter: CatalogFilterOptions | null | undefined,
+  catalogFilter: Record<string, any> | null | undefined,
   defaultKind?: string,
   defaultNamespace?: string
 ): EntityFilterQuery => {
@@ -121,22 +125,49 @@ const buildFilterQuery = (
 
   // Handle catalogFilter if it exists and is an object
   if (catalogFilter && typeof catalogFilter === "object") {
-    // Handle kind filter
-    if (catalogFilter.kind) {
-      query.kind = catalogFilter.kind;
-    }
+    // Handle known filter fields with proper type conversion
+    const filterEntries = Object.entries(catalogFilter);
 
-    // Handle type filter (goes to spec.type)
-    if (catalogFilter.type) {
-      query["spec.type"] = catalogFilter.type;
-    }
+    for (const [key, value] of filterEntries) {
+      if (value === undefined || value === null) continue;
 
-    // Handle other filters
-    Object.entries(catalogFilter).forEach(([key, value]) => {
-      if (key !== "kind" && key !== "type" && value !== undefined) {
-        query[key] = value;
+      // Convert value to proper type for EntityFilterQuery
+      let filterValue: string | string[];
+
+      if (Array.isArray(value)) {
+        filterValue = value.map((v) => String(v));
+      } else {
+        filterValue = String(value);
       }
-    });
+
+      // Map common filter keys
+      switch (key) {
+        case "kind":
+          query.kind = filterValue;
+          break;
+        case "type":
+          query["spec.type"] = filterValue;
+          break;
+        case "namespace":
+          query["metadata.namespace"] = filterValue;
+          break;
+        default:
+          // For other keys, use them as-is if they're valid EntityFilterQuery keys
+          if (
+            key.includes(".") ||
+            [
+              "kind",
+              "metadata.namespace",
+              "metadata.name",
+              "spec.type",
+              "spec.lifecycle",
+            ].includes(key)
+          ) {
+            (query as any)[key] = filterValue;
+          }
+          break;
+      }
+    }
   }
 
   return query;
@@ -179,10 +210,10 @@ export const EnhancedEntityPicker = (
     placeholder = "Select an entity...",
   } = uiOptions;
 
-  // Build entity filter query with type safety and use defaultKind/defaultNamespace
+  // Build entity filter query with type safety
   const filterQuery = useMemo(() => {
     return buildFilterQuery(
-      catalogFilter as CatalogFilterOptions | null | undefined,
+      catalogFilter as Record<string, any> | null | undefined,
       defaultKind,
       defaultNamespace
     );
@@ -218,9 +249,9 @@ export const EnhancedEntityPicker = (
   // Enhanced onChange handler with correct MUI signature
   const handleChange = useCallback(
     (
-      event: React.SyntheticEvent,
+      _event: React.SyntheticEvent,
       value: Entity | string | null,
-      reason: string
+      _reason: string
     ) => {
       if (!value) {
         onChange("");
@@ -263,7 +294,7 @@ export const EnhancedEntityPicker = (
 
   // Handle input change for free text input with correct signature
   const handleInputChange = useCallback(
-    (event: React.SyntheticEvent, value: string, reason: string) => {
+    (_event: React.SyntheticEvent, value: string, reason: string) => {
       setInputValue(value);
 
       if (allowArbitraryValues && value && reason === "input") {
