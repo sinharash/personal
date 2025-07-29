@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { useApi } from "@backstage/core-plugin-api";
 import {
@@ -7,7 +7,6 @@ import {
 } from "@backstage/plugin-catalog-react";
 import { Entity, stringifyEntityRef } from "@backstage/catalog-model";
 import { TextField, Autocomplete } from "@mui/material";
-import useAsync from "react-use/esm/useAsync";
 import { EntityFilterQuery } from "@backstage/catalog-client";
 
 // Schema definition for the field extension
@@ -68,7 +67,7 @@ interface UIOptions {
   placeholder?: string;
 }
 
-// Utility functions with better type safety
+// Utility functions
 const getNestedValue = (obj: any, path: string): any => {
   if (!obj || !path) return undefined;
   try {
@@ -106,94 +105,42 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
   }
 };
 
-// Build filter query with proper type safety
+// Simple filter query builder - similar to EntityPicker's approach
 const buildFilterQuery = (
-  catalogFilter: Record<string, any> | undefined,
-  defaultKind: string,
-  defaultNamespace: string
+  catalogFilter: Record<string, any> | undefined
 ): EntityFilterQuery => {
+  if (!catalogFilter) return {};
+
   const query: EntityFilterQuery = {};
 
-  // Add default kind if no kind in catalogFilter
-  if (!catalogFilter || !catalogFilter.kind) {
-    query.kind = defaultKind;
+  // Handle simple mappings like EntityPicker does
+  if (catalogFilter.kind) {
+    query.kind = catalogFilter.kind;
   }
-
-  // Add default namespace
-  query["metadata.namespace"] = defaultNamespace;
-
-  // Handle catalogFilter if it exists
-  if (catalogFilter && typeof catalogFilter === "object") {
-    Object.entries(catalogFilter).forEach(([key, value]) => {
-      if (value === undefined || value === null) return;
-
-      // Convert value to string or string array
-      let filterValue: string | string[];
-      if (Array.isArray(value)) {
-        filterValue = value.map((v) => String(v));
-      } else {
-        filterValue = String(value);
-      }
-
-      // Map known filter keys
-      if (key === "kind") {
-        query.kind = filterValue;
-      } else if (key === "type") {
-        query["spec.type"] = filterValue;
-      } else if (key === "namespace") {
-        query["metadata.namespace"] = filterValue;
-      } else if (
-        key.startsWith("metadata.") ||
-        key.startsWith("spec.") ||
-        key === "kind"
-      ) {
-        // Only allow known entity filter paths
-        (query as Record<string, string | string[]>)[key] = filterValue;
-      }
-    });
+  if (catalogFilter.type) {
+    query["spec.type"] = catalogFilter.type;
+  }
+  if (catalogFilter.namespace) {
+    query["metadata.namespace"] = catalogFilter.namespace;
   }
 
   return query;
 };
 
-// Safe UI options extraction with type checking
+// Safe UI options extraction
 const extractUIOptions = (uiSchema: any): UIOptions => {
   const options = uiSchema?.["ui:options"] || {};
 
   return {
     displayEntityFieldAfterFormatting:
-      typeof options.displayEntityFieldAfterFormatting === "string"
-        ? options.displayEntityFieldAfterFormatting
-        : undefined,
-    catalogFilter:
-      typeof options.catalogFilter === "object" &&
-      options.catalogFilter !== null
-        ? options.catalogFilter
-        : undefined,
-    uniqueIdentifierField:
-      typeof options.uniqueIdentifierField === "string"
-        ? options.uniqueIdentifierField
-        : "metadata.name",
-    defaultKind:
-      typeof options.defaultKind === "string"
-        ? options.defaultKind
-        : "Component",
-    defaultNamespace:
-      typeof options.defaultNamespace === "string"
-        ? options.defaultNamespace
-        : "default",
-    allowArbitraryValues:
-      typeof options.allowArbitraryValues === "boolean"
-        ? options.allowArbitraryValues
-        : true,
-    hiddenFieldName:
-      typeof options.hiddenFieldName === "string"
-        ? options.hiddenFieldName
-        : undefined,
-    placeholder:
-      typeof options.placeholder === "string"
-        ? options.placeholder
-        : "Select an entity...",
+      options.displayEntityFieldAfterFormatting,
+    catalogFilter: options.catalogFilter,
+    uniqueIdentifierField: options.uniqueIdentifierField || "metadata.name",
+    defaultKind: options.defaultKind || "Component",
+    defaultNamespace: options.defaultNamespace || "default",
+    allowArbitraryValues: options.allowArbitraryValues !== false, // Default to true
+    hiddenFieldName: options.hiddenFieldName,
+    placeholder: options.placeholder || "Select an entity...",
   };
 };
 
@@ -220,52 +167,72 @@ export const EnhancedEntityPicker = (
 
   const catalogApi = useApi(catalogApiRef);
   const [inputValue, setInputValue] = useState("");
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Extract UI options with proper type safety
+  // Extract UI options
   const {
     displayEntityFieldAfterFormatting,
     catalogFilter,
     uniqueIdentifierField,
-    defaultKind,
-    defaultNamespace,
     allowArbitraryValues,
     hiddenFieldName,
     placeholder,
   } = extractUIOptions(uiSchema);
 
-  // Build entity filter query with type safety
+  // Build filter query
   const filterQuery = useMemo(() => {
-    return buildFilterQuery(catalogFilter, defaultKind!, defaultNamespace!);
-  }, [catalogFilter, defaultKind, defaultNamespace]);
+    return buildFilterQuery(catalogFilter);
+  }, [catalogFilter]);
 
-  // Fetch entities from catalog
-  const { value: entities = [], loading } = useAsync(async () => {
-    try {
-      const response = await catalogApi.getEntities({
-        filter: filterQuery,
-      });
-      return response.items || [];
-    } catch (error) {
-      console.error("Failed to fetch entities:", error);
-      return [];
-    }
+  // Fetch entities - non-blocking approach like EntityPicker
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchEntities = async () => {
+      setLoading(true);
+      try {
+        const response = await catalogApi.getEntities({
+          filter: filterQuery,
+        });
+
+        if (!cancelled) {
+          setEntities(response.items || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch entities:", error);
+        if (!cancelled) {
+          setEntities([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchEntities();
+
+    return () => {
+      cancelled = true;
+    };
   }, [catalogApi, filterQuery]);
 
-  // Find selected entity with null safety
+  // Find selected entity
   const selectedEntity = useMemo(() => {
     if (!formData || !entities.length) return null;
 
     return (
       entities.find((entity) => {
         const entityRef = stringifyEntityRef(entity);
-        const customRef = getNestedValue(entity, uniqueIdentifierField!);
+        const customRef = getNestedValue(entity, uniqueIdentifierField);
         const customRefString = customRef ? String(customRef) : null;
         return entityRef === formData || customRefString === formData;
       }) || null
     );
   }, [formData, entities, uniqueIdentifierField]);
 
-  // Enhanced onChange handler with correct MUI signature
+  // Enhanced onChange handler
   const handleChange = useCallback(
     (
       _event: React.SyntheticEvent,
@@ -286,7 +253,7 @@ export const EnhancedEntityPicker = (
       // Handle Entity objects
       let entityValue: string;
       if (uniqueIdentifierField !== "metadata.name") {
-        const customValue = getNestedValue(value, uniqueIdentifierField!);
+        const customValue = getNestedValue(value, uniqueIdentifierField);
         entityValue = customValue
           ? String(customValue)
           : stringifyEntityRef(value);
@@ -311,18 +278,16 @@ export const EnhancedEntityPicker = (
     [onChange, uniqueIdentifierField, hiddenFieldName, formContext]
   );
 
-  // Handle input change for free text input with correct signature
+  // Handle input change
   const handleInputChange = useCallback(
     (_event: React.SyntheticEvent, value: string, reason: string) => {
       setInputValue(value);
 
       if (allowArbitraryValues && value && reason === "input") {
-        // Check if the input value matches any existing entity display value
         const matchesExistingEntity = entities.some((e) => {
-          const displayValue = formatDisplayValue(
-            displayEntityFieldAfterFormatting || "",
-            e
-          );
+          const displayValue = displayEntityFieldAfterFormatting
+            ? formatDisplayValue(displayEntityFieldAfterFormatting, e)
+            : e.metadata.title || e.metadata.name;
           return displayValue === value;
         });
 
@@ -339,24 +304,25 @@ export const EnhancedEntityPicker = (
     ]
   );
 
-  // Custom option label formatter with proper type handling
+  // Custom option label formatter - this is what shows in the input field
   const getOptionLabel = useCallback(
     (option: Entity | string) => {
-      // Handle string values (for arbitrary input)
       if (typeof option === "string") {
         return option;
       }
 
-      // Handle Entity objects
+      // Use custom formatting if provided
       if (displayEntityFieldAfterFormatting) {
         return formatDisplayValue(displayEntityFieldAfterFormatting, option);
       }
+
+      // Fallback to title or name
       return option.metadata.title || option.metadata.name;
     },
     [displayEntityFieldAfterFormatting]
   );
 
-  // Determine if option is equal to value (for selection highlighting)
+  // Option equality check
   const isOptionEqualToValue = useCallback(
     (option: Entity | string, value: Entity | string) => {
       if (typeof option === "string" && typeof value === "string") {
@@ -406,18 +372,33 @@ export const EnhancedEntityPicker = (
           margin="normal"
         />
       )}
-      renderOption={(props, entity) => (
-        <li
-          {...props}
-          key={typeof entity === "string" ? entity : stringifyEntityRef(entity)}
-        >
-          {typeof entity === "string" ? (
-            entity
-          ) : (
-            <EntityDisplayName entityRef={stringifyEntityRef(entity)} />
-          )}
-        </li>
-      )}
+      renderOption={(props, entity) => {
+        // THIS IS THE KEY FIX: Use custom formatting in dropdown options
+        if (typeof entity === "string") {
+          return (
+            <li {...props} key={entity}>
+              {entity}
+            </li>
+          );
+        }
+
+        // Use custom display formatting if provided
+        const displayText = displayEntityFieldAfterFormatting
+          ? formatDisplayValue(displayEntityFieldAfterFormatting, entity)
+          : undefined;
+
+        return (
+          <li {...props} key={stringifyEntityRef(entity)}>
+            {displayText ? (
+              // Show custom formatted text
+              <span>{displayText}</span>
+            ) : (
+              // Fallback to EntityDisplayName for default formatting
+              <EntityDisplayName entityRef={stringifyEntityRef(entity)} />
+            )}
+          </li>
+        );
+      }}
     />
   );
 };
