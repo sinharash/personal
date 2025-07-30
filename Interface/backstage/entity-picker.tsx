@@ -1,21 +1,5 @@
-/*
- * Copyright 2021 The Backstage Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 // Enhanced EntityPicker based on Backstage's EntityPicker with custom features
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
 import { useApi } from "@backstage/core-plugin-api";
@@ -24,19 +8,13 @@ import {
   entityPresentationApiRef,
   EntityDisplayName,
 } from "@backstage/plugin-catalog-react";
-import {
-  Entity,
-  parseEntityRef,
-  stringifyEntityRef,
-} from "@backstage/catalog-model";
+import { Entity, stringifyEntityRef } from "@backstage/catalog-model";
 import {
   type EntityFilterQuery,
   CATALOG_FILTER_EXISTS,
 } from "@backstage/catalog-client";
 import { TextField, Autocomplete, createFilterOptions } from "@mui/material";
 import type { AutocompleteChangeReason } from "@mui/material";
-import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
-import { scaffolderTranslationRef } from "@backstage/plugin-scaffolder/alpha";
 import useAsync from "react-use/esm/useAsync";
 
 // Enhanced UI Options that extend EntityPicker options
@@ -153,7 +131,10 @@ function convertOpsValues(value: any): string | string[] | symbol {
       return CATALOG_FILTER_EXISTS;
     }
   }
-  return value;
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v));
+  }
+  return String(value);
 }
 
 function buildEntityFilterQuery(
@@ -166,22 +147,16 @@ function buildEntityFilterQuery(
     return undefined;
   }
 
-  const query: EntityFilterQuery = {};
+  const query: Record<string, string | string[] | symbol> = {};
 
   // Handle catalogFilter
   if (catalogFilter && typeof catalogFilter === "object") {
     for (const [key, value] of Object.entries(catalogFilter)) {
       if (value === undefined || value === null) continue;
 
-      if (Array.isArray(value)) {
-        query[key] = value
-          .map((v) => convertOpsValues(v))
-          .filter((v) => v !== undefined);
-      } else {
-        const convertedValue = convertOpsValues(value);
-        if (convertedValue !== undefined) {
-          query[key] = convertedValue;
-        }
+      const convertedValue = convertOpsValues(value);
+      if (convertedValue !== undefined) {
+        query[key] = convertedValue;
       }
     }
   }
@@ -201,7 +176,9 @@ function buildEntityFilterQuery(
     query["metadata.namespace"] = defaultNamespace;
   }
 
-  return Object.keys(query).length > 0 ? query : undefined;
+  return Object.keys(query).length > 0
+    ? (query as EntityFilterQuery)
+    : undefined;
 }
 
 /**
@@ -211,9 +188,9 @@ function buildEntityFilterQuery(
 export const EnhancedEntityPicker = (
   props: FieldExtensionComponentProps<string>
 ) => {
-  const { t } = useTranslationRef(scaffolderTranslationRef);
+  // Simplified without translation for now - can be added back if available
   const {
-    schema: { title = t("fields.entityPicker.title"), description },
+    schema: { title = "Entity", description },
     uiSchema,
     formData,
     formContext,
@@ -221,10 +198,11 @@ export const EnhancedEntityPicker = (
     rawErrors = [],
     required = false,
     disabled = false,
-    // Include all other FieldExtensionComponentProps
-    idSchema,
-    errorSchema,
-    registry,
+    // These props are part of FieldExtensionComponentProps but not directly used
+    // in this component - they're handled by the form system
+    idSchema: _idSchema,
+    errorSchema: _errorSchema,
+    registry: _registry,
     name,
     onBlur,
     onFocus,
@@ -240,7 +218,7 @@ export const EnhancedEntityPicker = (
     displayEntityFieldAfterFormatting,
     uniqueIdentifierField = "metadata.name",
     hiddenFieldName,
-    placeholder = t("fields.entityPicker.placeholder"),
+    placeholder = "Select an entity...",
   } = uiOptions;
 
   // Build filter query using EntityPicker's logic
@@ -257,12 +235,27 @@ export const EnhancedEntityPicker = (
     });
 
     const entityRefs = items.map(stringifyEntityRef);
-    const entityRefToPresentationPromise =
-      entityPresentationApi.forEntityRefs(entityRefs);
+
+    // Try to get presentation data if API is available
+    let entityRefToPresentation: Map<string, any> | undefined;
+    try {
+      if (
+        entityPresentationApi &&
+        typeof entityPresentationApi.forEntityRefs === "function"
+      ) {
+        entityRefToPresentation = await entityPresentationApi.forEntityRefs(
+          entityRefs
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "EntityPresentationApi not available, using fallback display"
+      );
+    }
 
     return {
       entities: items,
-      entityRefToPresentation: await entityRefToPresentationPromise,
+      entityRefToPresentation,
     };
   }, [catalogApi, entityPresentationApi, entityFilterQuery]);
 
@@ -314,17 +307,11 @@ export const EnhancedEntityPicker = (
   const handleChange = useCallback(
     (
       _event: React.SyntheticEvent,
-      value: Entity | string | null,
+      value: Entity | null,
       _reason: AutocompleteChangeReason
     ) => {
       if (!value) {
         onChange("");
-        return;
-      }
-
-      // Handle string values (freeSolo input)
-      if (typeof value === "string") {
-        onChange(value);
         return;
       }
 
@@ -370,13 +357,9 @@ export const EnhancedEntityPicker = (
     ]
   );
 
-  // Option label formatter
+  // Option label formatter - only for Entity objects
   const getOptionLabel = useCallback(
-    (option: Entity | string) => {
-      if (typeof option === "string") {
-        return option;
-      }
-
+    (option: Entity) => {
       // Enhanced: Use custom formatting if provided
       if (displayEntityFieldAfterFormatting) {
         return formatDisplayValue(displayEntityFieldAfterFormatting, option);
@@ -394,7 +377,7 @@ export const EnhancedEntityPicker = (
     [displayEntityFieldAfterFormatting, entityRefToPresentation]
   );
 
-  // Render option formatter
+  // Render option formatter - only for Entity objects
   const renderOption = useCallback(
     (option: Entity) => {
       // Enhanced: Use custom formatting in dropdown if provided
@@ -419,7 +402,7 @@ export const EnhancedEntityPicker = (
       required={required}
       disabled={disabled}
     >
-      <Autocomplete
+      <Autocomplete<Entity, false, boolean, boolean>
         id={name}
         value={selectedEntity}
         loading={loading}
