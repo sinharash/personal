@@ -22,15 +22,11 @@ import {
 } from "@backstage/plugin-catalog-react";
 
 // MUI Migration: Updated imports
-import { TextField } from "@mui/material";
+import { TextField, FormControl, FormHelperText } from "@mui/material";
 import { Autocomplete, createFilterOptions } from "@mui/material";
 import { AutocompleteChangeReason } from "@mui/material";
 
 import useAsync from "react-use/esm/useAsync";
-import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
-import { scaffolderTranslationRef } from "../../../translation";
-import { ScaffolderField } from "../ScaffolderField";
-import { VirtualizedListbox } from "../VirtualizedListbox";
 
 // Type definitions based on Backstage EntityPicker
 export type EntityPickerFilterQueryValue = string | string[] | { exists: true };
@@ -63,6 +59,49 @@ export interface EntityPickerProps {
   readonly?: boolean;
   rawErrors?: string[];
 }
+
+/**
+ * Simple virtualized listbox component for performance with large datasets
+ * Alternative to Backstage's internal VirtualizedListbox
+ */
+const VirtualizedListbox = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLElement>
+>((props, ref) => {
+  const { children, ...other } = props;
+
+  // For now, return a simple div - you can enhance this with react-window if needed
+  return (
+    <div ref={ref} {...other}>
+      {children}
+    </div>
+  );
+});
+
+/**
+ * Simple field wrapper component
+ * Alternative to Backstage's internal ScaffolderField
+ */
+const SimpleFieldWrapper: React.FC<{
+  children: React.ReactNode;
+  loading?: boolean;
+  error?: Error;
+  rawErrors?: string[];
+  helperText?: string;
+}> = ({ children, loading, error, rawErrors, helperText }) => {
+  const hasError = Boolean(rawErrors?.length || error);
+
+  return (
+    <FormControl fullWidth margin="dense" error={hasError}>
+      {children}
+      {(helperText || hasError) && (
+        <FormHelperText>
+          {hasError ? rawErrors?.[0] || error?.message : helperText}
+        </FormHelperText>
+      )}
+    </FormControl>
+  );
+};
 
 /**
  * Converts a special `{exists: true}` value to the `CATALOG_FILTER_EXISTS` symbol.
@@ -137,6 +176,7 @@ function buildCatalogFilter(
  * - Autocomplete with entity display names
  * - Support for arbitrary values
  * - Migrated to @mui from @material-ui
+ * - Uses public Backstage APIs only
  */
 export const EnhancedEntityPicker = (props: EntityPickerProps) => {
   const {
@@ -150,7 +190,6 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
     rawErrors,
   } = props;
 
-  const { t } = useTranslationRef(scaffolderTranslationRef);
   const catalogApi = useApi(catalogApiRef);
   const entityPresentationApi = useApi(entityPresentationApiRef);
 
@@ -236,13 +275,11 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
   };
 
   const currentValue = getCurrentValue();
-  const entityRefs =
-    entities?.items.map((entity) => stringifyEntityRef(entity)) || [];
   const isDisabled = disabled || readonly;
   const hasError = Boolean(rawErrors?.length);
 
   return (
-    <ScaffolderField
+    <SimpleFieldWrapper
       loading={loading}
       error={error}
       rawErrors={rawErrors}
@@ -284,7 +321,6 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
             required={required}
             disabled={isDisabled}
             error={hasError}
-            helperText={hasError ? rawErrors?.[0] : description}
             InputProps={params.InputProps}
           />
         )}
@@ -305,7 +341,7 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
         ListboxComponent={VirtualizedListbox}
         disabled={isDisabled}
       />
-    </ScaffolderField>
+    </SimpleFieldWrapper>
   );
 };
 
