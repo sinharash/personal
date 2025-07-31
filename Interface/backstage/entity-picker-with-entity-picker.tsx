@@ -1,11 +1,10 @@
-// EnhancedEntityPicker.tsx - Fully fixed version with no TypeScript errors
+// EnhancedEntityPicker.tsx - Clean version without presentation API complexities
 import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { useApi } from "@backstage/core-plugin-api";
 import {
   catalogApiRef,
   EntityDisplayName,
-  entityPresentationApiRef,
 } from "@backstage/plugin-catalog-react";
 import {
   Entity,
@@ -155,7 +154,7 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
   }
 };
 
-// Build filter query - now returns proper EntityFilterQuery type
+// Build filter query
 const buildFilterQuery = (
   uiOptions: UIOptions
 ): EntityFilterQuery | undefined => {
@@ -173,9 +172,12 @@ const buildFilterQuery = (
     Object.entries(catalogFilter).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
 
-      // Handle special 'exists' case
-      if (typeof value === "object" && value.exists === true) {
-        query[key] = CATALOG_FILTER_EXISTS;
+      // Handle special 'exists' case with proper type checking
+      if (typeof value === "object" && value !== null && "exists" in value) {
+        const objWithExists = value as { exists?: boolean };
+        if (objWithExists.exists === true) {
+          query[key] = CATALOG_FILTER_EXISTS;
+        }
       } else if (typeof value === "string" || Array.isArray(value)) {
         query[key] = value;
       } else if (typeof value === "boolean") {
@@ -231,14 +233,10 @@ export const EnhancedEntityPicker = (
   } = props;
 
   const catalogApi = useApi(catalogApiRef);
-  const entityPresentationApi = useApi(entityPresentationApiRef);
 
   const [inputValue, setInputValue] = useState("");
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(false);
-  const [entityPresentations, setEntityPresentations] = useState<
-    Map<string, string>
-  >(new Map());
 
   // Extract UI options
   const {
@@ -268,35 +266,6 @@ export const EnhancedEntityPicker = (
 
         if (!cancelled) {
           setEntities(response.items || []);
-
-          // Try to get entity presentations if API is available
-          const entityRefs = response.items.map((e) => stringifyEntityRef(e));
-          if (entityRefs.length > 0) {
-            try {
-              // Use the entityPresentationApi to get display names
-              const presentationMap = new Map<string, string>();
-
-              // Fetch presentations one by one or in batch if API supports it
-              for (const entityRef of entityRefs) {
-                try {
-                  // Try to get the presentation for each entity
-                  const snapshot = await entityPresentationApi
-                    .forEntity(entityRef)
-                    .promise();
-                  if (snapshot?.primaryTitle) {
-                    presentationMap.set(entityRef, snapshot.primaryTitle);
-                  }
-                } catch {
-                  // If individual fetch fails, continue
-                }
-              }
-
-              setEntityPresentations(presentationMap);
-            } catch (error) {
-              // Presentation API might not be available, that's OK
-              console.debug("Entity presentation API not available:", error);
-            }
-          }
         }
       } catch (error) {
         console.error("Failed to fetch entities:", error);
@@ -315,7 +284,7 @@ export const EnhancedEntityPicker = (
     return () => {
       cancelled = true;
     };
-  }, [catalogApi, entityPresentationApi, filterQuery]);
+  }, [catalogApi, filterQuery]);
 
   // Find selected entity
   const selectedEntity = useMemo(() => {
@@ -342,9 +311,8 @@ export const EnhancedEntityPicker = (
         const customRef = getNestedValue(entity, uniqueIdentifierField);
         if (customRef && String(customRef) === searchValue) return true;
 
-        // Check presentation title
-        const presentationTitle = entityPresentations.get(entityRef);
-        if (presentationTitle === searchValue) return true;
+        // Check title
+        if (entity.metadata.title === searchValue) return true;
 
         return false;
       }) || null
@@ -355,7 +323,6 @@ export const EnhancedEntityPicker = (
     displayEntityFieldAfterFormatting,
     uniqueIdentifierField,
     defaultEntityRef,
-    entityPresentations,
   ]);
 
   // Handle selection change
@@ -383,10 +350,7 @@ export const EnhancedEntityPicker = (
           value
         );
       } else {
-        const entityRef = stringifyEntityRef(value);
-        const presentationTitle = entityPresentations.get(entityRef);
-        displayValue =
-          presentationTitle || value.metadata.title || value.metadata.name;
+        displayValue = value.metadata.title || value.metadata.name;
       }
 
       onChange(displayValue);
@@ -401,13 +365,7 @@ export const EnhancedEntityPicker = (
         }
       }
     },
-    [
-      onChange,
-      displayEntityFieldAfterFormatting,
-      hiddenFieldName,
-      formContext,
-      entityPresentations,
-    ]
+    [onChange, displayEntityFieldAfterFormatting, hiddenFieldName, formContext]
   );
 
   // Handle input change
@@ -419,9 +377,7 @@ export const EnhancedEntityPicker = (
         const matchesExistingEntity = entities.some((e) => {
           const displayValue = displayEntityFieldAfterFormatting
             ? formatDisplayValue(displayEntityFieldAfterFormatting, e)
-            : entityPresentations.get(stringifyEntityRef(e)) ||
-              e.metadata.title ||
-              e.metadata.name;
+            : e.metadata.title || e.metadata.name;
           return displayValue === value;
         });
 
@@ -435,7 +391,6 @@ export const EnhancedEntityPicker = (
       entities,
       displayEntityFieldAfterFormatting,
       onChange,
-      entityPresentations,
     ]
   );
 
@@ -450,11 +405,9 @@ export const EnhancedEntityPicker = (
         return formatDisplayValue(displayEntityFieldAfterFormatting, option);
       }
 
-      const entityRef = stringifyEntityRef(option);
-      const presentationTitle = entityPresentations.get(entityRef);
-      return presentationTitle || option.metadata.title || option.metadata.name;
+      return option.metadata.title || option.metadata.name;
     },
-    [displayEntityFieldAfterFormatting, entityPresentations]
+    [displayEntityFieldAfterFormatting]
   );
 
   // Filter options
