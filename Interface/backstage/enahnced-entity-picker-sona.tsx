@@ -3,7 +3,7 @@
  * Converted from @material-ui to @mui
  */
 
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback } from "react";
 import {
   type EntityFilterQuery,
   CATALOG_FILTER_EXISTS,
@@ -16,7 +16,6 @@ import {
 import { useApi } from "@backstage/core-plugin-api";
 import {
   EntityDisplayName,
-  EntityRefPresentationSnapshot,
   catalogApiRef,
   entityPresentationApiRef,
 } from "@backstage/plugin-catalog-react";
@@ -77,31 +76,6 @@ const VirtualizedListbox = React.forwardRef<
     </div>
   );
 });
-
-/**
- * Simple field wrapper component
- * Alternative to Backstage's internal ScaffolderField
- */
-const SimpleFieldWrapper: React.FC<{
-  children: React.ReactNode;
-  loading?: boolean;
-  error?: Error;
-  rawErrors?: string[];
-  helperText?: string;
-}> = ({ children, loading, error, rawErrors, helperText }) => {
-  const hasError = Boolean(rawErrors?.length || error);
-
-  return (
-    <FormControl fullWidth margin="dense" error={hasError}>
-      {children}
-      {(helperText || hasError) && (
-        <FormHelperText>
-          {hasError ? rawErrors?.[0] || error?.message : helperText}
-        </FormHelperText>
-      )}
-    </FormControl>
-  );
-};
 
 /**
  * Converts a special `{exists: true}` value to the `CATALOG_FILTER_EXISTS` symbol.
@@ -196,7 +170,6 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
   // Extract UI options
   const allowArbitraryValues =
     uiSchema["ui:options"]?.allowArbitraryValues ?? true;
-  const defaultKind = uiSchema["ui:options"]?.defaultKind;
   const defaultNamespace = uiSchema["ui:options"]?.defaultNamespace;
 
   // Build catalog filter
@@ -212,17 +185,27 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
       filter: catalogFilter,
     });
 
-    const entityRefs = catalogEntities.items.map((entity) =>
-      stringifyEntityRef(entity)
-    );
+    // Create a simple map for entity references to their display info
+    const entityRefToPresentation = new Map();
 
-    const presentations = await entityPresentationApi.forEntityRefs(entityRefs);
+    for (const entity of catalogEntities.items) {
+      const entityRef = stringifyEntityRef(entity);
+      try {
+        const presentation = await entityPresentationApi.forEntity(entity)
+          .promise;
+        entityRefToPresentation.set(entityRef, presentation);
+      } catch {
+        // Fallback to entity ref if presentation fails
+        entityRefToPresentation.set(entityRef, {
+          primaryTitle: entityRef,
+          secondaryTitle: entity.metadata.description,
+        });
+      }
+    }
 
     return {
       items: catalogEntities.items,
-      entityRefToPresentation: new Map(
-        entityRefs.map((ref, index) => [ref, presentations[index]])
-      ),
+      entityRefToPresentation,
     };
   }, [catalogApi, entityPresentationApi, catalogFilter]);
 
@@ -231,7 +214,7 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
     (
       _event: React.SyntheticEvent,
       value: Entity | string | null,
-      reason: AutocompleteChangeReason
+      _reason: AutocompleteChangeReason
     ) => {
       if (value === null) {
         onChange("");
@@ -279,12 +262,7 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
   const hasError = Boolean(rawErrors?.length);
 
   return (
-    <SimpleFieldWrapper
-      loading={loading}
-      error={error}
-      rawErrors={rawErrors}
-      helperText={description}
-    >
+    <FormControl fullWidth margin="dense" error={hasError}>
       <Autocomplete
         id="enhanced-entity-picker"
         value={currentValue}
@@ -321,6 +299,7 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
             required={required}
             disabled={isDisabled}
             error={hasError}
+            helperText={hasError ? rawErrors?.[0] : description}
             InputProps={params.InputProps}
           />
         )}
@@ -341,7 +320,12 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
         ListboxComponent={VirtualizedListbox}
         disabled={isDisabled}
       />
-    </SimpleFieldWrapper>
+      {error && (
+        <FormHelperText error>
+          Failed to load entities: {error.message}
+        </FormHelperText>
+      )}
+    </FormControl>
   );
 };
 
