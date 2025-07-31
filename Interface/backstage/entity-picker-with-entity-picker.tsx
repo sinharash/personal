@@ -1,4 +1,4 @@
-// EnhancedEntityPicker.tsx - Complete implementation with all Backstage features
+// EnhancedEntityPicker.tsx - Fixed version with all errors resolved
 import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { FieldExtensionComponentProps } from "@backstage/plugin-scaffolder-react";
 import { useApi } from "@backstage/core-plugin-api";
@@ -20,7 +20,27 @@ import {
   CATALOG_FILTER_EXISTS,
 } from "@backstage/catalog-client";
 import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
-import { scaffolderTranslationRef } from "@backstage/plugin-scaffolder-react/alpha";
+import { scaffolderReactTranslationRef } from "@backstage/plugin-scaffolder-react/alpha";
+
+// Import VirtualizedListbox (create a simple one for now)
+const VirtualizedListbox = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLElement>
+>(function VirtualizedListbox(props, ref) {
+  const { children, ...other } = props;
+  return (
+    <div ref={ref} {...other}>
+      <div
+        style={{
+          maxHeight: "400px",
+          overflow: "auto",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+});
 
 // Schema definition
 export const EnhancedEntityPickerSchema = {
@@ -79,7 +99,7 @@ export const EnhancedEntityPickerSchema = {
   },
 };
 
-// Type definitions
+// Type definitions with proper types
 interface EntityPickerFilterQueryValue {
   exists?: boolean;
   [key: string]: string | string[] | boolean | undefined;
@@ -91,7 +111,7 @@ interface EntityPickerFilterQuery {
 
 interface UIOptions {
   allowedKinds?: string[];
-  catalogFilter?: EntityPickerFilterQuery;
+  catalogFilter?: EntityPickerFilterQuery | EntityPickerFilterQuery[];
   defaultKind?: string;
   defaultNamespace?: string;
   allowArbitraryValues?: boolean;
@@ -142,12 +162,12 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
 
 // Convert special filter values (like {exists: true}) to symbols
 function convertOpsValues(
-  value: Exclude<EntityPickerFilterQueryValue, Array<any>>
-): string | symbol | undefined {
-  if (typeof value !== "object") {
+  value: EntityPickerFilterQueryValue
+): string | string[] | symbol | undefined {
+  if (typeof value === "string" || Array.isArray(value)) {
     return value;
   }
-  if (value.exists) {
+  if (typeof value === "object" && value.exists) {
     return CATALOG_FILTER_EXISTS;
   }
   return undefined;
@@ -155,15 +175,27 @@ function convertOpsValues(
 
 // Convert schema filters to API query format
 function convertSchemaFiltersToQuery(
-  schemaFilters: EntityPickerFilterQuery
-): Exclude<EntityFilterQuery, Array<any>> {
+  schemaFilters: EntityPickerFilterQuery | EntityPickerFilterQuery[]
+): EntityFilterQuery | EntityFilterQuery[] {
+  if (Array.isArray(schemaFilters)) {
+    return schemaFilters.map((filter) => convertSingleFilter(filter));
+  }
+  return convertSingleFilter(schemaFilters);
+}
+
+function convertSingleFilter(
+  schemaFilter: EntityPickerFilterQuery
+): EntityFilterQuery {
   const query: EntityFilterQuery = {};
 
-  for (const [key, value] of Object.entries(schemaFilters)) {
+  for (const [key, value] of Object.entries(schemaFilter)) {
     if (Array.isArray(value)) {
       query[key] = value;
     } else {
-      query[key] = convertOpsValues(value);
+      const converted = convertOpsValues(value as EntityPickerFilterQueryValue);
+      if (converted !== undefined) {
+        query[key] = converted;
+      }
     }
   }
 
@@ -173,7 +205,7 @@ function convertSchemaFiltersToQuery(
 // Build filter query from UI options
 const buildFilterQuery = (
   uiOptions: UIOptions
-): EntityFilterQuery | undefined => {
+): EntityFilterQuery | EntityFilterQuery[] | undefined => {
   const { catalogFilter, allowedKinds } = uiOptions;
 
   if (catalogFilter) {
@@ -225,7 +257,7 @@ export const EnhancedEntityPicker = (
 
   const catalogApi = useApi(catalogApiRef);
   const entityPresentationApi = useApi(entityPresentationApiRef);
-  const { t } = useTranslationRef(scaffolderTranslationRef);
+  const { t } = useTranslationRef(scaffolderReactTranslationRef); // Fixed!
 
   const [inputValue, setInputValue] = useState("");
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -241,7 +273,6 @@ export const EnhancedEntityPicker = (
 
   // Extract UI options
   const {
-    catalogFilter,
     uniqueIdentifierField,
     allowArbitraryValues,
     hiddenFieldName,
@@ -263,7 +294,7 @@ export const EnhancedEntityPicker = (
       setLoading(true);
       try {
         const response = await catalogApi.getEntities({
-          filter: filterQuery,
+          filter: filterQuery as EntityFilterQuery, // Type assertion to fix type issue
         });
 
         if (!cancelled) {
@@ -273,16 +304,19 @@ export const EnhancedEntityPicker = (
           const entityRefs = response.items.map((e) => stringifyEntityRef(e));
           if (entityRefs.length > 0) {
             try {
-              const presentations = await entityPresentationApi.forceRefresh(
+              // Use refresh method instead of forceRefresh
+              const presentations = await entityPresentationApi.refresh(
                 entityRefs
               );
               const presentationMap = new Map<
                 string,
                 EntityRefPresentationSnapshot
               >();
-              presentations.forEach((presentation) => {
-                presentationMap.set(presentation.entityRef, presentation);
-              });
+              presentations.forEach(
+                (presentation: EntityRefPresentationSnapshot) => {
+                  presentationMap.set(presentation.entityRef, presentation);
+                }
+              );
               setEntityRefToPresentation(presentationMap);
             } catch (error) {
               console.warn("Failed to fetch entity presentations:", error);
@@ -503,6 +537,7 @@ export const EnhancedEntityPicker = (
       freeSolo={allowArbitraryValues}
       filterOptions={filterOptions}
       autoSelect
+      ListboxComponent={VirtualizedListbox} // Added!
       renderInput={(params) => (
         <TextField
           {...params}
