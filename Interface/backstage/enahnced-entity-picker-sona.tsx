@@ -8,11 +8,7 @@ import {
   type EntityFilterQuery,
   CATALOG_FILTER_EXISTS,
 } from "@backstage/catalog-client";
-import {
-  Entity,
-  parseEntityRef,
-  stringifyEntityRef,
-} from "@backstage/catalog-model";
+import { stringifyEntityRef } from "@backstage/catalog-model";
 import { useApi } from "@backstage/core-plugin-api";
 import {
   EntityDisplayName,
@@ -170,7 +166,6 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
   // Extract UI options
   const allowArbitraryValues =
     uiSchema["ui:options"]?.allowArbitraryValues ?? true;
-  const defaultNamespace = uiSchema["ui:options"]?.defaultNamespace;
 
   // Build catalog filter
   const catalogFilter = buildCatalogFilter(uiSchema);
@@ -181,9 +176,22 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
     loading,
     error,
   } = useAsync(async () => {
-    const catalogEntities = await catalogApi.getEntities({
-      filter: catalogFilter,
-    });
+    // Only fetch the fields we actually need for performance
+    const fields = [
+      "kind",
+      "metadata.name",
+      "metadata.namespace",
+      "metadata.title",
+      "metadata.description",
+      "spec.profile.displayName",
+      "spec.type",
+    ];
+
+    const catalogEntities = await catalogApi.getEntities(
+      catalogFilter
+        ? { filter: catalogFilter, fields }
+        : { filter: undefined, fields }
+    );
 
     // Create entity reference strings for the options
     const entityRefs = catalogEntities.items.map((entity) =>
@@ -314,3 +322,5 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
     </FormControl>
   );
 };
+
+export default EnhancedEntityPicker;
