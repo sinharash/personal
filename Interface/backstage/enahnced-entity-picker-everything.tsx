@@ -14,480 +14,51 @@
  * limitations under the License.
  */
 
-import React, { useCallback, useEffect, forwardRef, useContext } from "react";
-import {
-  TextField,
-  Autocomplete,
-  createFilterOptions,
-  ListSubheader,
-  useMediaQuery,
-  useTheme,
-  Box,
-  FormControl,
-  FormHelperText,
-  Typography,
-} from "@mui/material";
+import React, { useCallback, useEffect } from "react";
+import { TextField, Autocomplete, createFilterOptions } from "@mui/material";
 import { AutocompleteChangeReason } from "@mui/material/Autocomplete";
-import { VariableSizeList, ListChildComponentProps } from "react-window";
 import useAsync from "react-use/esm/useAsync";
-import { makeStyles } from "@mui/styles";
-import { FieldProps, FieldValidation } from "@rjsf/utils";
-import { z } from "zod";
 
-// ==================== Types & Interfaces ====================
+// Import all the actual Backstage dependencies
+import {
+  type EntityFilterQuery,
+  CATALOG_FILTER_EXISTS,
+} from "@backstage/catalog-client";
+import {
+  Entity,
+  parseEntityRef,
+  stringifyEntityRef,
+} from "@backstage/catalog-model";
+import { useApi } from "@backstage/core-plugin-api";
+import {
+  EntityDisplayName,
+  EntityRefPresentationSnapshot,
+  catalogApiRef,
+  entityPresentationApiRef,
+} from "@backstage/plugin-catalog-react";
+import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
+import { scaffolderTranslationRef } from "@backstage/core-plugin-api/alpha";
+import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
 
-// Entity types (from @backstage/catalog-model)
-export interface Entity {
-  apiVersion: string;
-  kind: string;
-  metadata: {
-    namespace?: string;
-    name: string;
-    title?: string;
-    description?: string;
-    labels?: Record<string, string>;
-    annotations?: Record<string, string>;
-    tags?: string[];
-    uid?: string;
-    etag?: string;
-    generation?: number;
-  };
-  spec?: any;
-  status?: any;
-  relations?: Array<{
-    type: string;
-    targetRef: string;
-  }>;
-}
-
-// From @backstage/catalog-client
-export type EntityFilterQuery = {
-  [key: string]: string | string[] | symbol | { exists: boolean };
-};
-
-export const CATALOG_FILTER_EXISTS = Symbol("CATALOG_FILTER_EXISTS");
-
-// Entity ref presentation
-export interface EntityRefPresentationSnapshot {
-  entityRef: string;
-  primaryTitle?: string;
-  secondaryTitle?: string;
-  description?: string;
-}
-
-// Schema types
-export type EntityPickerFilterQueryValue =
-  | string
-  | string[]
-  | { exists: boolean };
-
-export type EntityPickerFilterQuery = {
-  [key: string]: EntityPickerFilterQueryValue;
-};
-
-export interface EntityPickerUiOptions {
-  allowArbitraryValues?: boolean;
-  catalogFilter?: EntityPickerFilterQuery | EntityPickerFilterQuery[];
-  allowedKinds?: string[];
-  defaultKind?: string;
-  defaultNamespace?: string;
-}
-
-export interface EntityPickerFieldProps {
-  allowedKinds?: string[];
-}
-
-export type EntityPickerFieldValue = string;
-
-export type EntityPickerProps = FieldProps<
-  EntityPickerFieldValue,
+// Import schema types from the actual schema file
+import {
+  EntityPickerFilterQueryValue,
+  EntityPickerProps,
   EntityPickerUiOptions,
-  EntityPickerFieldProps
->;
+  EntityPickerFilterQuery,
+} from "./schema";
 
-// ==================== Entity Ref Functions ====================
+// Import VirtualizedListbox from the actual component
+import { VirtualizedListbox } from "./VirtualizedListbox";
 
-export function parseEntityRef(
-  entityRef: string,
-  context?: { defaultKind?: string; defaultNamespace?: string }
-): { kind: string; namespace: string; name: string } {
-  const match = entityRef.match(/^(?:([^:]+):)?(?:([^/]+)\/)?(.+)$/);
-  if (!match) {
-    throw new Error(`Invalid entity reference: ${entityRef}`);
-  }
-  const [, kind, namespace, name] = match;
-  return {
-    kind: kind || context?.defaultKind || "Component",
-    namespace: namespace || context?.defaultNamespace || "default",
-    name,
-  };
-}
+export { EntityPickerSchema } from "./schema";
 
-export function stringifyEntityRef(
-  entity: Entity | { kind?: string; namespace?: string; name: string }
-): string {
-  let kind;
-  let namespace;
-  let name;
-
-  if ("metadata" in entity) {
-    kind = entity.kind;
-    namespace = entity.metadata.namespace;
-    name = entity.metadata.name;
-  } else {
-    kind = entity.kind;
-    namespace = entity.namespace;
-    name = entity.name;
-  }
-
-  return `${kind || "Component"}:${namespace || "default"}/${name}`;
-}
-
-// ==================== makeFieldSchemaFromZod ====================
-export function makeFieldSchemaFromZod(
-  fieldSchema: z.ZodSchema,
-  uiOptionsSchema?: z.ZodSchema
-) {
-  return {
-    schema: fieldSchema,
-    uiSchema: uiOptionsSchema,
-  };
-}
-
-export const EntityPickerSchema = makeFieldSchemaFromZod(
-  z.string(),
-  z.object({
-    allowArbitraryValues: z
-      .boolean()
-      .optional()
-      .describe("Whether to allow arbitrary user input. Defaults to true."),
-    catalogFilter: z
-      .union([
-        z.record(
-          z.union([
-            z.string(),
-            z.array(z.string()),
-            z.object({ exists: z.boolean() }),
-          ])
-        ),
-        z.array(
-          z.record(
-            z.union([
-              z.string(),
-              z.array(z.string()),
-              z.object({ exists: z.boolean() }),
-            ])
-          )
-        ),
-      ])
-      .optional()
-      .describe("The filter options to pass into the catalog-client"),
-    defaultKind: z
-      .string()
-      .optional()
-      .describe("The default kind to use (defaults to Component)"),
-    defaultNamespace: z
-      .string()
-      .optional()
-      .describe(
-        "The namespace to default to if none is specified (defaults to default)"
-      ),
-  })
-);
-
-// ==================== API Context ====================
-
-// Simplified API context for standalone usage
-const ApiContext = React.createContext<{
-  catalogApi?: any;
-  entityPresentationApi?: any;
-  translationApi?: any;
-}>({});
-
-export const catalogApiRef = Symbol("catalogApiRef");
-export const entityPresentationApiRef = Symbol("entityPresentationApiRef");
-export const scaffolderTranslationRef = Symbol("scaffolderTranslationRef");
-
-export function useApi(apiRef: symbol) {
-  const apis = useContext(ApiContext);
-
-  if (apiRef === catalogApiRef) {
-    return (
-      apis.catalogApi || {
-        getEntities: async (request?: {
-          filter?: EntityFilterQuery;
-          fields?: string[];
-        }) => {
-          // This should be replaced with actual catalog API implementation
-          console.warn(
-            "Using mock catalog API - replace with actual implementation"
-          );
-          return { items: [] };
-        },
-      }
-    );
-  }
-
-  if (apiRef === entityPresentationApiRef) {
-    return (
-      apis.entityPresentationApi || {
-        forEntity: (entity: Entity) => ({
-          promise: Promise.resolve({
-            entityRef: stringifyEntityRef(entity),
-            primaryTitle: entity.metadata.title || entity.metadata.name,
-            secondaryTitle: `${entity.kind} | ${
-              entity.metadata.namespace || "default"
-            }`,
-            description: entity.metadata.description,
-          } as EntityRefPresentationSnapshot),
-        }),
-      }
-    );
-  }
-
-  return null;
-}
-
-export function useTranslationRef(ref: symbol) {
-  const translations: Record<string, string> = {
-    "fields.entityPicker.title": "Entity",
-    "fields.entityPicker.description": "Select an entity",
-  };
-
-  return {
-    t: (key: string) => translations[key] || key,
-  };
-}
-
-// ==================== EntityDisplayName Component ====================
-
-export const EntityDisplayName: React.FC<{ entityRef: Entity | string }> = ({
-  entityRef,
-}) => {
-  const entityPresentationApi = useApi(entityPresentationApiRef);
-  const [presentation, setPresentation] =
-    React.useState<EntityRefPresentationSnapshot | null>(null);
-
-  React.useEffect(() => {
-    if (typeof entityRef === "string") {
-      setPresentation({
-        entityRef,
-        primaryTitle: entityRef,
-      });
-    } else {
-      entityPresentationApi.forEntity(entityRef).promise.then(setPresentation);
-    }
-  }, [entityRef, entityPresentationApi]);
-
-  if (!presentation) {
-    return (
-      <span>
-        {typeof entityRef === "string"
-          ? entityRef
-          : stringifyEntityRef(entityRef)}
-      </span>
-    );
-  }
-
-  return (
-    <Box>
-      <Typography component="span">{presentation.primaryTitle}</Typography>
-      {presentation.secondaryTitle && (
-        <Typography
-          component="span"
-          variant="caption"
-          sx={{ ml: 1, color: "text.secondary" }}
-        >
-          {presentation.secondaryTitle}
-        </Typography>
-      )}
-    </Box>
-  );
-};
-
-// ==================== VirtualizedListbox Component ====================
-const LISTBOX_PADDING = 8;
-
-function renderRow(props: ListChildComponentProps) {
-  const { data, index, style } = props;
-  const dataSet = data[index];
-  const inlineStyle = {
-    ...style,
-    top: (style.top as number) + LISTBOX_PADDING,
-  };
-
-  if ("group" in dataSet) {
-    return (
-      <ListSubheader key={dataSet.key} component="div" style={inlineStyle}>
-        {dataSet.group}
-      </ListSubheader>
-    );
-  }
-
-  return React.cloneElement(dataSet, {
-    style: inlineStyle,
-  });
-}
-
-const OuterElementContext = React.createContext({});
-
-const OuterElementType = forwardRef<HTMLDivElement>((props, ref) => {
-  const outerProps = useContext(OuterElementContext);
-  return <div ref={ref} {...props} {...outerProps} />;
-});
-
-function useResetCache(data: any) {
-  const ref = React.useRef<VariableSizeList>(null);
-  React.useEffect(() => {
-    if (ref.current != null) {
-      ref.current.resetAfterIndex(0, true);
-    }
-  }, [data]);
-  return ref;
-}
-
-export const VirtualizedListbox = forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLElement>
->(function VirtualizedListbox(props, ref) {
-  const { children, ...other } = props;
-  const itemData = React.Children.toArray(children);
-  const theme = useTheme();
-  const smUp = useMediaQuery(theme.breakpoints.up("sm"), {
-    noSsr: true,
-  });
-  const itemCount = itemData.length;
-  const itemSize = smUp ? 36 : 48;
-
-  const getChildSize = (child: React.ReactNode) => {
-    if (React.isValidElement(child) && child.type === ListSubheader) {
-      return 48;
-    }
-    return itemSize;
-  };
-
-  const getHeight = () => {
-    if (itemCount > 8) {
-      return 8 * itemSize;
-    }
-    return itemData.map(getChildSize).reduce((a, b) => a + b, 0);
-  };
-
-  const gridRef = useResetCache(itemCount);
-
-  return (
-    <div ref={ref}>
-      <OuterElementContext.Provider value={other}>
-        <VariableSizeList
-          itemData={itemData}
-          height={getHeight() + 2 * LISTBOX_PADDING}
-          width="100%"
-          ref={gridRef}
-          outerElementType={OuterElementType}
-          innerElementType="ul"
-          itemSize={(index) => getChildSize(itemData[index])}
-          overscanCount={5}
-          itemCount={itemCount}
-        >
-          {renderRow}
-        </VariableSizeList>
-      </OuterElementContext.Provider>
-    </div>
-  );
-});
-
-// ==================== ScaffolderField Component ====================
-const useStyles = makeStyles((theme: any) => ({
-  markdownDescription: {
-    fontSize: theme.typography.caption.fontSize,
-    margin: 0,
-    color: theme.palette.text.secondary,
-    "& :first-child": {
-      margin: 0,
-      marginTop: "3px",
-    },
-  },
-}));
-
-interface ScaffolderFieldProps {
-  rawDescription?: string;
-  errors?: React.ReactElement;
-  rawErrors?: string[];
-  help?: React.ReactElement;
-  rawHelp?: string;
-  required?: boolean;
-  disabled?: boolean;
-  displayLabel?: boolean;
-  children: React.ReactNode;
-}
-
-const MarkdownContent: React.FC<{ content: string; className?: string }> = ({
-  content,
-  className,
-}) => {
-  return (
-    <div className={className} dangerouslySetInnerHTML={{ __html: content }} />
-  );
-};
-
-export const ScaffolderField: React.FC<ScaffolderFieldProps> = (props) => {
-  const {
-    children,
-    rawErrors,
-    rawDescription,
-    errors,
-    rawHelp,
-    help,
-    disabled,
-    displayLabel = true,
-  } = props;
-  const classes = useStyles();
-
-  const showDescription = !!(rawDescription && displayLabel);
-
-  return (
-    <FormControl
-      fullWidth
-      error={!!rawErrors?.length || !!errors}
-      disabled={disabled}
-      margin="normal"
-    >
-      {children}
-      {showDescription && (
-        <MarkdownContent
-          content={rawDescription!}
-          className={classes.markdownDescription}
-        />
-      )}
-      {(rawHelp || help) && (
-        <FormHelperText>
-          {!rawHelp && help}
-          {!!rawHelp && (
-            <MarkdownContent
-              content={rawHelp}
-              className={classes.markdownDescription}
-            />
-          )}
-        </FormHelperText>
-      )}
-      {(rawErrors || errors) && (
-        <FormHelperText error>
-          {!rawErrors && errors}
-          {!!rawErrors && (
-            <>
-              {rawErrors.map((error, i) => (
-                <span key={i}>{error}</span>
-              ))}
-            </>
-          )}
-        </FormHelperText>
-      )}
-    </FormControl>
-  );
-};
-
-// ==================== Helper Functions ====================
-
+/**
+ * Converts a especial `{exists: true}` value to the `CATALOG_FILTER_EXISTS` symbol.
+ *
+ * @param value - The value to convert.
+ * @returns The converted value.
+ */
 function convertOpsValues(
   value: Exclude<EntityPickerFilterQueryValue, Array<any>>
 ): string | symbol {
@@ -497,6 +68,15 @@ function convertOpsValues(
   return value?.toString();
 }
 
+/**
+ * Converts schema filters to entity filter query, replacing `{exists:true}` values
+ * with the constant `CATALOG_FILTER_EXISTS`.
+ *
+ * @param schemaFilters - An object containing schema filters with keys as filter names
+ * and values as filter values.
+ * @returns An object with the same keys as the input object, but with `{exists:true}` values
+ * transformed to `CATALOG_FILTER_EXISTS` symbol.
+ */
 function convertSchemaFiltersToQuery(
   schemaFilters: EntityPickerFilterQuery
 ): Exclude<EntityFilterQuery, Array<any>> {
@@ -513,6 +93,14 @@ function convertSchemaFiltersToQuery(
   return query;
 }
 
+/**
+ * Builds an `EntityFilterQuery` based on the `uiSchema` passed in.
+ * If `catalogFilter` is specified in the `uiSchema`, it is converted to a `EntityFilterQuery`.
+ * If `allowedKinds` is specified in the `uiSchema` will support the legacy `allowedKinds` option.
+ *
+ * @param uiSchema The `uiSchema` of an `EntityPicker` component.
+ * @returns An `EntityFilterQuery` based on the `uiSchema`, or `undefined` if `catalogFilter` is not specified in the `uiSchema`.
+ */
 function buildCatalogFilter(
   uiSchema: EntityPickerProps["uiSchema"]
 ): EntityFilterQuery | undefined {
@@ -533,8 +121,12 @@ function buildCatalogFilter(
   return convertSchemaFiltersToQuery(catalogFilter);
 }
 
-// ==================== EntityPicker Component ====================
-
+/**
+ * The underlying component that is rendered in the form for the `EntityPicker`
+ * field extension.
+ *
+ * @public
+ */
 export const EntityPicker = (props: EntityPickerProps) => {
   const { t } = useTranslationRef(scaffolderTranslationRef);
   const {
@@ -711,16 +303,3 @@ export const EntityPicker = (props: EntityPickerProps) => {
 
 // Export enhanced version
 export const EnhancedEntityPicker = EntityPicker;
-
-// ==================== API Provider Component ====================
-export const EntityPickerApiProvider: React.FC<{
-  children: React.ReactNode;
-  catalogApi: any;
-  entityPresentationApi?: any;
-}> = ({ children, catalogApi, entityPresentationApi }) => {
-  return (
-    <ApiContext.Provider value={{ catalogApi, entityPresentationApi }}>
-      {children}
-    </ApiContext.Provider>
-  );
-};

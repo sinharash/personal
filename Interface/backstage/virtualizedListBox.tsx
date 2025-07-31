@@ -1,12 +1,25 @@
-// VirtualizedListbox.tsx - Virtualized list for better performance with large datasets
-import React, { forwardRef, HTMLAttributes, ReactElement } from "react";
+/*
+ * Copyright 2023 The Backstage Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import React, { forwardRef, useContext } from "react";
 import { VariableSizeList, ListChildComponentProps } from "react-window";
-import { useTheme } from "@mui/material/styles";
-import { Typography } from "@mui/material";
+import { ListSubheader, useMediaQuery, useTheme } from "@mui/material";
 
 const LISTBOX_PADDING = 8; // px
 
-// Component to render each row in the virtual list
 function renderRow(props: ListChildComponentProps) {
   const { data, index, style } = props;
   const dataSet = data[index];
@@ -15,22 +28,27 @@ function renderRow(props: ListChildComponentProps) {
     top: (style.top as number) + LISTBOX_PADDING,
   };
 
+  if ("group" in dataSet) {
+    return (
+      <ListSubheader key={dataSet.key} component="div" style={inlineStyle}>
+        {dataSet.group}
+      </ListSubheader>
+    );
+  }
+
   return React.cloneElement(dataSet, {
     style: inlineStyle,
   });
 }
 
-// Context for outer element props
 const OuterElementContext = React.createContext({});
 
-// Outer element component
 const OuterElementType = forwardRef<HTMLDivElement>((props, ref) => {
-  const outerProps = React.useContext(OuterElementContext);
+  const outerProps = useContext(OuterElementContext);
   return <div ref={ref} {...props} {...outerProps} />;
 });
 
-// Adapter for using VariableSizeList with MUI Autocomplete
-function useResetCache(data: number) {
+function useResetCache(data: any) {
   const ref = React.useRef<VariableSizeList>(null);
   React.useEffect(() => {
     if (ref.current != null) {
@@ -40,31 +58,25 @@ function useResetCache(data: number) {
   return ref;
 }
 
-/**
- * VirtualizedListbox - A virtualized listbox component for MUI Autocomplete
- * Renders only visible items for better performance with large lists
- */
+// Adapter for react-window
 export const VirtualizedListbox = forwardRef<
   HTMLDivElement,
-  HTMLAttributes<HTMLElement>
+  React.HTMLAttributes<HTMLElement>
 >(function VirtualizedListbox(props, ref) {
   const { children, ...other } = props;
-  const itemData: ReactElement[] = [];
+  const itemData = React.Children.toArray(children);
   const theme = useTheme();
-
-  // Extract children into flat array
-  (children as ReactElement[]).forEach((item: ReactElement) => {
-    itemData.push(item);
-    // Handle grouped items if needed
-    if (item.children && Array.isArray(item.children)) {
-      itemData.push(...(item.children as ReactElement[]));
-    }
+  const smUp = useMediaQuery(theme.breakpoints.up("sm"), {
+    noSsr: true,
   });
-
   const itemCount = itemData.length;
-  const itemSize = 48; // Standard MUI list item height
+  const itemSize = smUp ? 36 : 48;
 
-  const getChildSize = () => {
+  const getChildSize = (child: React.ReactNode) => {
+    if (React.isValidElement(child) && child.type === ListSubheader) {
+      return 48;
+    }
+
     return itemSize;
   };
 
@@ -87,39 +99,13 @@ export const VirtualizedListbox = forwardRef<
           ref={gridRef}
           outerElementType={OuterElementType}
           innerElementType="ul"
-          itemSize={getChildSize}
+          itemSize={(index) => getChildSize(itemData[index])}
           overscanCount={5}
           itemCount={itemCount}
         >
           {renderRow}
         </VariableSizeList>
       </OuterElementContext.Provider>
-    </div>
-  );
-});
-
-// If you prefer a simpler implementation without react-window dependency:
-export const SimpleVirtualizedListbox = forwardRef<
-  HTMLDivElement,
-  HTMLAttributes<HTMLElement>
->(function SimpleVirtualizedListbox(props, ref) {
-  const { children, ...other } = props;
-  const theme = useTheme();
-
-  // Simple implementation that just limits height and adds scrolling
-  return (
-    <div ref={ref} {...other}>
-      <ul
-        style={{
-          padding: LISTBOX_PADDING,
-          maxHeight: 8 * 48, // Show max 8 items
-          overflow: "auto",
-          margin: 0,
-          listStyle: "none",
-        }}
-      >
-        {children}
-      </ul>
     </div>
   );
 });
