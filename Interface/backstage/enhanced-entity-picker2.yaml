@@ -1,0 +1,69 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: entity-picker-quick-test
+  title: Quick Entity Picker Test
+  description: Side-by-side comparison of EntityPicker vs EnhancedEntityPicker
+spec:
+  owner: platform-team
+  type: test
+
+  parameters:
+    - title: "Side by Side Comparison"
+      properties:
+        # Standard EntityPicker
+        standardPicker:
+          title: "Standard EntityPicker"
+          type: string
+          description: "Original Backstage EntityPicker"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: User
+
+        # Enhanced EntityPicker (basic mode)
+        enhancedPickerBasic:
+          title: "Enhanced EntityPicker (Basic Mode)"
+          type: string
+          description: "Should work exactly like standard"
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            catalogFilter:
+              kind: User
+
+        # Enhanced EntityPicker (with display formatting)
+        enhancedPickerFormatted:
+          title: "Enhanced EntityPicker (With Formatting)"
+          type: string
+          description: "Shows user-friendly display"
+          ui:field: EnhancedEntityPicker
+          ui:options:
+            catalogFilter:
+              kind: User
+            displayEntityFieldAfterFormatting: "{{ metadata.title }} - {{ spec.profile.email }}"
+            hiddenFieldName: "userEntityRef"
+
+        userEntityRef:
+          type: string
+          ui:widget: hidden
+
+  steps:
+    - id: log-results
+      name: "Compare Results"
+      action: debug:log
+      input:
+        message: |
+          ===== COMPARISON RESULTS =====
+
+          Standard EntityPicker selected: 
+            ${{ parameters.standardPicker }}
+
+          Enhanced EntityPicker (basic) selected: 
+            ${{ parameters.enhancedPickerBasic }}
+
+          Enhanced EntityPicker (formatted) selected:
+            Display: ${{ parameters.enhancedPickerFormatted }}
+            Hidden Ref: ${{ parameters.userEntityRef }}
+
+          ✅ Basic mode should show same value as standard
+          ✨ Formatted mode should show friendly text

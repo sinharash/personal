@@ -10,7 +10,7 @@ metadata:
 spec:
   owner: platform-team
   type: service
-  
+
   parameters:
     - title: "Team Setup"
       properties:
@@ -24,8 +24,8 @@ spec:
             catalogFilter:
               kind: User
             hiddenFieldName: "projectOwnerEntityRef"
-        
-        # Resource Account selection  
+
+        # Resource Account selection
         resourceTeam:
           title: Resource Account
           type: string
@@ -35,7 +35,7 @@ spec:
             catalogFilter:
               kind: Resource
             hiddenFieldName: "resourceTeamEntityRef"
-            
+
         # System selection
         baseSystem:
           title: Base Component
@@ -46,7 +46,7 @@ spec:
             catalogFilter:
               kind: System
             hiddenFieldName: "baseSystemEntityRef"
-            
+
         # Service selection with custom identifier
         parentService:
           title: Parent Service
@@ -84,19 +84,19 @@ spec:
       action: catalog:fetch
       input:
         entityRef: "${{ parameters.projectOwnerEntityRef }}"
-      
+
     - id: fetch-resource
       name: "Get Resource Name"
       action: catalog:fetch
       input:
         entityRef: "${{ parameters.resourceTeamEntityRef }}"
-        
+
     - id: fetch-system
       name: "Get System"
       action: catalog:fetch
       input:
         entityRef: "${{ parameters.baseSystemEntityRef }}"
-        
+
     - id: fetch-service
       name: "Get Parent Service"
       action: catalog:fetch
@@ -109,32 +109,32 @@ spec:
       action: debug:log
       input:
         message: |
-          
+
           📋 Full User Details:
           - 👤 Name: ${{ steps['fetch-user'].output.entity.metadata.name }}
           - 📧 Email: ${{ steps['fetch-user'].output.entity.spec.profile.email }}
           - 🏢 Department: ${{ steps['fetch-user'].output.entity.spec.profile.department }}
           - 🖼️ Picture: ${{ steps['fetch-user'].output.entity.spec.profile.picture }}
-          
-    # Show the works - RESOURCE  
+
+    # Show the works - RESOURCE
     - id: show-success-fetch-resource
       name: "📋 Show Success Fetch Resource"
       action: debug:log
       input:
         message: |
-          
+
           📋 Full Resource Details:
           - 📊 Entity Group: ${{ steps['fetch-resource'].output.entity.metadata.entre_admin_group }}
           - 🏛️ Admins: ${{ steps['fetch-resource'].output.entity.metadata.admins }}
           - 📝 Type: ${{ steps['fetch-resource'].output.entity.spec.type }}
-          
+
     # Show the works - SYSTEM
-    - id: show-success-fetch-system  
+    - id: show-success-fetch-system
       name: "📋 Show Success Fetch System"
       action: debug:log
       input:
         message: |
-          
+
           📋 Full System Details:
           - 📖 Description: ${{ steps['fetch-system'].output.entity.metadata.description }}
           - 🏢 Business Director: ${{ steps['fetch-system'].output.entity.metadata.businessDirector }}
@@ -152,23 +152,23 @@ spec:
           resourceTeam: ${{ parameters.resourceTeam }}
           baseSystem: ${{ parameters.baseSystem }}
           parentService: ${{ parameters.parentService }}
-          
+
           # Complete entity information
           projectOwnerDetails:
             name: ${{ steps['fetch-user'].output.entity.metadata.name }}
             email: ${{ steps['fetch-user'].output.entity.spec.profile.email }}
             department: ${{ steps['fetch-user'].output.entity.spec.profile.department }}
-            
+
           resourceTeamDetails:
             adminGroup: ${{ steps['fetch-resource'].output.entity.metadata.entre_admin_group }}
             admins: ${{ steps['fetch-resource'].output.entity.metadata.admins }}
             type: ${{ steps['fetch-resource'].output.entity.spec.type }}
-            
+
           baseSystemDetails:
             description: ${{ steps['fetch-system'].output.entity.metadata.description }}
             businessDirector: ${{ steps['fetch-system'].output.entity.metadata.businessDirector }}
             url: ${{ steps['fetch-system'].output.entity.metadata.links.url }}
-            
+
           parentServiceDetails:
             title: ${{ steps['fetch-service'].output.entity.metadata.title }}
             type: ${{ steps['fetch-service'].output.entity.spec.type }}
