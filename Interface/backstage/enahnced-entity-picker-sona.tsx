@@ -185,6 +185,11 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
       filter: catalogFilter,
     });
 
+    // Create entity reference strings for the options
+    const entityRefs = catalogEntities.items.map((entity) =>
+      stringifyEntityRef(entity)
+    );
+
     // Create a simple map for entity references to their display info
     const entityRefToPresentation = new Map();
 
@@ -205,6 +210,7 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
 
     return {
       items: catalogEntities.items,
+      entityRefs, // This is what we use as options
       entityRefToPresentation,
     };
   }, [catalogApi, entityPresentationApi, catalogFilter]);
@@ -213,7 +219,7 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
   const handleChange = useCallback(
     (
       _event: React.SyntheticEvent,
-      value: Entity | string | null,
+      value: string | null,
       _reason: AutocompleteChangeReason
     ) => {
       if (value === null) {
@@ -221,40 +227,28 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
         return;
       }
 
-      if (typeof value === "string") {
-        // Handle free text input
-        onChange(value);
-      } else {
-        // Handle entity selection
-        const entityRef = stringifyEntityRef({
-          kind: value.kind,
-          namespace: value.metadata.namespace || defaultNamespace || "default",
-          name: value.metadata.name,
-        });
-        onChange(entityRef);
-      }
+      // Value is already an entity reference string or arbitrary text
+      onChange(value);
     },
-    [onChange, defaultNamespace]
+    [onChange]
   );
 
   // Get current value for display
   const getCurrentValue = () => {
     if (!formData) return null;
 
-    try {
-      const parsedRef = parseEntityRef(formData);
-      return (
-        entities?.items.find(
-          (entity) =>
-            entity.kind === parsedRef.kind &&
-            entity.metadata.name === parsedRef.name &&
-            (entity.metadata.namespace || "default") ===
-              (parsedRef.namespace || "default")
-        ) || (allowArbitraryValues ? formData : null)
-      );
-    } catch {
-      return allowArbitraryValues ? formData : null;
+    // If the formData matches one of our entityRefs, return it
+    if (entities?.entityRefs.includes(formData)) {
+      return formData;
     }
+
+    // If allowing arbitrary values, return the formData as-is
+    if (allowArbitraryValues) {
+      return formData;
+    }
+
+    // If not allowing arbitrary values and no match found, return null
+    return null;
   };
 
   const currentValue = getCurrentValue();
@@ -267,25 +261,17 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
         id="enhanced-entity-picker"
         value={currentValue}
         loading={loading}
-        options={entities?.items || []}
+        options={entities?.entityRefs || []}
         getOptionLabel={(option) => {
-          if (typeof option === "string") {
-            return option;
-          }
-          const entityRef = stringifyEntityRef(option);
+          // option is now an entityRef string
           return (
-            entities?.entityRefToPresentation.get(entityRef)?.primaryTitle ||
-            entityRef
+            entities?.entityRefToPresentation.get(option)?.primaryTitle ||
+            option
           );
         }}
         isOptionEqualToValue={(option, value) => {
-          if (typeof option === "string" && typeof value === "string") {
-            return option === value;
-          }
-          if (typeof option === "object" && typeof value === "object") {
-            return stringifyEntityRef(option) === stringifyEntityRef(value);
-          }
-          return false;
+          // Both option and value are strings now
+          return option === value;
         }}
         onChange={handleChange}
         autoSelect
@@ -305,15 +291,15 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
         )}
         renderOption={(props, option) => (
           <li {...props}>
-            <EntityDisplayName entityRef={stringifyEntityRef(option)} />
+            <EntityDisplayName entityRef={option} />
           </li>
         )}
         filterOptions={createFilterOptions({
           stringify: (option) => {
-            const entityRef = stringifyEntityRef(option);
+            // option is an entityRef string
             return (
-              entities?.entityRefToPresentation.get(entityRef)?.primaryTitle ||
-              entityRef
+              entities?.entityRefToPresentation.get(option)?.primaryTitle ||
+              option
             );
           },
         })}
@@ -328,5 +314,3 @@ export const EnhancedEntityPicker = (props: EntityPickerProps) => {
     </FormControl>
   );
 };
-
-export default EnhancedEntityPicker;
