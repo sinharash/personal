@@ -36,8 +36,17 @@ import {
   catalogApiRef,
   entityPresentationApiRef,
 } from "@backstage/plugin-catalog-react";
+
+// Translation imports - OPTION 1: If you're inside the scaffolder plugin
+// import { useTranslationRef } from '@backstage/core-plugin-api/alpha';
+// import { scaffolderTranslationRef } from '../../../translation';
+
+// Translation imports - OPTION 2: If translations are exported from the plugin
+// import { useTranslationRef } from '@backstage/core-plugin-api/alpha';
+// import { scaffolderTranslationRef } from '@backstage/plugin-scaffolder';
+
+// Translation imports - OPTION 3: Comment out if translations not available
 import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
-import { scaffolderTranslationRef } from "@backstage/core-plugin-api/alpha";
 import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
 
 // Import schema types from the actual schema file
@@ -52,6 +61,9 @@ import {
 import { VirtualizedListbox } from "./VirtualizedListbox";
 
 export { EntityPickerSchema } from "./schema";
+
+// If you can't import scaffolderTranslationRef, create a mock:
+const scaffolderTranslationRef = { id: "scaffolder" };
 
 /**
  * Converts a especial `{exists: true}` value to the `CATALOG_FILTER_EXISTS` symbol.
@@ -104,11 +116,12 @@ function convertSchemaFiltersToQuery(
 function buildCatalogFilter(
   uiSchema: EntityPickerProps["uiSchema"]
 ): EntityFilterQuery | undefined {
-  const allowedKinds = uiSchema?.["ui:options"]?.allowedKinds;
+  const uiOptions = uiSchema?.["ui:options"];
+  if (!uiOptions) return undefined;
 
-  const catalogFilter: EntityPickerUiOptions["catalogFilter"] | undefined =
-    uiSchema?.["ui:options"]?.catalogFilter ||
-    (allowedKinds && { kind: allowedKinds });
+  const allowedKinds = uiOptions.allowedKinds;
+  const catalogFilter =
+    uiOptions.catalogFilter || (allowedKinds && { kind: allowedKinds });
 
   if (!catalogFilter) {
     return undefined;
@@ -128,7 +141,22 @@ function buildCatalogFilter(
  * @public
  */
 export const EntityPicker = (props: EntityPickerProps) => {
-  const { t } = useTranslationRef(scaffolderTranslationRef);
+  // Handle translations - with fallback
+  let t: (key: string) => string;
+  try {
+    const translationRef = useTranslationRef(scaffolderTranslationRef);
+    t = translationRef.t;
+  } catch {
+    // Fallback if translation hook not available
+    t = (key: string) => {
+      const translations: Record<string, string> = {
+        "fields.entityPicker.title": "Entity",
+        "fields.entityPicker.description": "Select an entity",
+      };
+      return translations[key] || key;
+    };
+  }
+
   const {
     onChange,
     schema: {
@@ -142,10 +170,11 @@ export const EntityPicker = (props: EntityPickerProps) => {
     idSchema,
     errors,
   } = props;
+
   const catalogFilter = buildCatalogFilter(uiSchema);
-  const defaultKind = uiSchema?.["ui:options"]?.defaultKind;
-  const defaultNamespace =
-    uiSchema?.["ui:options"]?.defaultNamespace || undefined;
+  const uiOptions = uiSchema?.["ui:options"] || {};
+  const defaultKind = uiOptions.defaultKind;
+  const defaultNamespace = uiOptions.defaultNamespace || undefined;
   const isDisabled = uiSchema?.["ui:disabled"] ?? false;
 
   const catalogApi = useApi(catalogApiRef);
@@ -186,8 +215,7 @@ export const EntityPicker = (props: EntityPickerProps) => {
     return { catalogEntities: items, entityRefToPresentation };
   });
 
-  const allowArbitraryValues =
-    uiSchema?.["ui:options"]?.allowArbitraryValues ?? true;
+  const allowArbitraryValues = uiOptions.allowArbitraryValues ?? true;
 
   const getLabel = useCallback(
     (freeSoloValue: string) => {
