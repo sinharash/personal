@@ -1,62 +1,135 @@
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: entity-picker-test-template
-  title: Enhanced Entity Picker Test Template
-  description: Comprehensive test cases for EnhancedEntityPicker component
+  name: entity-picker-comprehensive-test
+  title: EntityPicker Comprehensive Test Template
+  description: Tests all features of the Backstage EntityPicker component
   tags:
     - test
     - entity-picker
+    - comprehensive
 spec:
   owner: backstage/techdocs-core
   type: test
   parameters:
-    - title: Basic Entity Picker Tests
+    - title: Basic EntityPicker Features
       properties:
-        # Test Case 1: Basic entity picker with default settings
+        # Test 1: Default EntityPicker with no options
         basicEntity:
-          title: Basic Entity
+          title: Basic Entity (Default)
           type: string
-          description: Basic entity picker with default settings (allows arbitrary values)
+          description: Default EntityPicker with no options specified
           ui:field: EntityPicker
 
-        # Test Case 2: Entity picker that only allows valid entities
-        validEntityOnly:
-          title: Valid Entity Only
+        # Test 2: Entity picker with custom description
+        entityWithDescription:
+          title: Entity with UI Description
           type: string
-          description: Entity picker that only allows selection of valid entities
           ui:field: EntityPicker
-          ui:options:
-            allowArbitraryValues: false
+          ui:description: This is a custom description from ui:description that should appear as helper text
 
-        # Test Case 3: Required entity field
+        # Test 3: Required entity field
         requiredEntity:
           title: Required Entity
           type: string
-          description: This entity field is required
+          description: This field is required
+          ui:field: EntityPicker
+      required:
+        - requiredEntity
+
+    - title: Arbitrary Values Control
+      properties:
+        # Test 4: Allow arbitrary values (explicit true)
+        allowArbitraryTrue:
+          title: Allow Arbitrary Values (True)
+          type: string
+          description: You can type any value, not just existing entities
+          ui:field: EntityPicker
+          ui:options:
+            allowArbitraryValues: true
+
+        # Test 5: Disallow arbitrary values
+        allowArbitraryFalse:
+          title: Allow Arbitrary Values (False)
+          type: string
+          description: You can only select existing entities from the catalog
           ui:field: EntityPicker
           ui:options:
             allowArbitraryValues: false
 
-    - title: Entity Filtering Tests
-      required:
-        - requiredEntity
+    - title: Default Values Configuration
       properties:
-        # Test Case 4: Filter by single kind
-        componentOnly:
-          title: Component Only
+        # Test 6: Default kind
+        defaultKindSystem:
+          title: Default Kind (System)
           type: string
-          description: Only shows Component entities
+          description: When typing arbitrary values, defaults to System kind
+          ui:field: EntityPicker
+          ui:options:
+            defaultKind: System
+            allowArbitraryValues: true
+
+        # Test 7: Default namespace
+        customNamespace:
+          title: Custom Default Namespace
+          type: string
+          description: Uses 'production' as default namespace instead of 'default'
+          ui:field: EntityPicker
+          ui:options:
+            defaultNamespace: production
+            allowArbitraryValues: true
+
+        # Test 8: Both default kind and namespace
+        fullDefaults:
+          title: Full Default Configuration
+          type: string
+          description: API kind in external namespace by default
+          default: "API:external/my-api"
+          ui:field: EntityPicker
+          ui:options:
+            defaultKind: API
+            defaultNamespace: external
+            allowArbitraryValues: true
+
+    - title: Basic Filtering - Single Kind
+      properties:
+        # Test 9: Filter by single kind using catalogFilter
+        componentOnly:
+          title: Components Only
+          type: string
+          description: Shows only Component entities
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
               kind: Component
 
-        # Test Case 5: Filter by multiple kinds
-        groupOrUser:
-          title: Group or User
+        # Test 10: Filter by different kind
+        systemOnly:
+          title: Systems Only
           type: string
-          description: Shows only Group or User entities
+          description: Shows only System entities
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: System
+
+        # Test 11: Legacy allowedKinds (deprecated but still supported)
+        legacyAllowedKinds:
+          title: Groups Only (Legacy allowedKinds)
+          type: string
+          description: Uses deprecated allowedKinds - should still work
+          ui:field: EntityPicker
+          ui:options:
+            allowedKinds:
+              - Group
+
+    - title: Multiple Kind Filtering
+      properties:
+        # Test 12: Multiple kinds array
+        multipleKinds:
+          title: Groups and Users
+          type: string
+          description: Shows both Group and User entities
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
@@ -64,18 +137,35 @@ spec:
                 - Group
                 - User
 
-        # Test Case 6: Legacy allowedKinds support
-        systemOnlyLegacy:
-          title: System Only (Legacy)
+        # Test 13: Many kinds
+        manyKinds:
+          title: Multiple Entity Types
           type: string
-          description: Uses legacy allowedKinds option
+          description: Components, APIs, Systems, and Resources
           ui:field: EntityPicker
           ui:options:
-            allowedKinds:
-              - System
+            catalogFilter:
+              kind:
+                - Component
+                - API
+                - System
+                - Resource
 
-        # Test Case 7: Filter by spec.type
-        teamGroupsOnly:
+    - title: Advanced Filtering - Spec Fields
+      properties:
+        # Test 14: Filter by spec.type
+        serviceComponents:
+          title: Service Components Only
+          type: string
+          description: Only shows components with spec.type = service
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Component
+              spec.type: service
+
+        # Test 15: Filter groups by type
+        teamGroups:
           title: Team Groups Only
           type: string
           description: Only shows groups with spec.type = team
@@ -85,225 +175,327 @@ spec:
               kind: Group
               spec.type: team
 
-        # Test Case 8: Complex catalog filter
-        productionServices:
-          title: Production Services
+        # Test 16: Multiple spec filters
+        productionWebsites:
+          title: Production Websites
           type: string
-          description: Only shows production service components
+          description: Components that are websites in production
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
               kind: Component
-              spec.type: service
+              spec.type: website
               spec.lifecycle: production
 
-    - title: Default Values Tests
+    - title: Metadata Filtering
       properties:
-        # Test Case 9: Default kind
-        defaultKindSystem:
-          title: Default Kind System
+        # Test 17: Filter by namespace
+        defaultNamespaceOnly:
+          title: Default Namespace Entities
           type: string
-          description: Defaults to System kind when entering arbitrary values
-          ui:field: EntityPicker
-          ui:options:
-            defaultKind: System
-            allowArbitraryValues: true
-
-        # Test Case 10: Default namespace
-        customNamespace:
-          title: Custom Namespace Entity
-          type: string
-          description: Uses custom namespace instead of default
-          ui:field: EntityPicker
-          ui:options:
-            defaultNamespace: production
-            allowArbitraryValues: true
-
-        # Test Case 11: Both default kind and namespace
-        fullDefaults:
-          title: Full Default Configuration
-          type: string
-          description: Has both default kind and namespace configured
-          ui:field: EntityPicker
-          ui:options:
-            defaultKind: API
-            defaultNamespace: external
-            allowArbitraryValues: true
-
-    - title: Owner Picker Pattern Tests
-      properties:
-        # Test Case 12: Owner picker pattern (Group or User)
-        ownerPicker:
-          title: Owner
-          type: string
-          description: Owner picker showing Groups and Users
+          description: Only shows entities in the default namespace
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
-              kind:
-                - Group
-                - User
-            defaultKind: Group
-            allowArbitraryValues: true
+              metadata.namespace: default
 
-        # Test Case 13: Restricted owner picker
-        restrictedOwner:
-          title: Restricted Owner
+        # Test 18: Filter by custom namespace
+        productionNamespace:
+          title: Production Namespace Entities
           type: string
-          description: Owner picker that only allows valid Groups
+          description: Only shows entities in the production namespace
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
-              kind: Group
-            defaultKind: Group
-            allowArbitraryValues: false
+              metadata.namespace: production
 
-    - title: Advanced Filter Tests
+        # Test 19: Filter by tags
+        frontendTagged:
+          title: Frontend Tagged Entities
+          type: string
+          description: Only shows entities tagged with 'frontend'
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              metadata.tags: frontend
+
+        # Test 20: Multiple tags
+        multipleTagsFilter:
+          title: Multiple Tags Filter
+          type: string
+          description: Entities with either frontend or backend tags
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              metadata.tags:
+                - frontend
+                - backend
+
+    - title: Label and Annotation Filtering
       properties:
-        # Test Case 14: Filter with exists operator
+        # Test 21: Filter by label
+        labelFilter:
+          title: Filter by Label
+          type: string
+          description: Entities with specific label
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              metadata.labels.environment: production
+
+        # Test 22: Filter by annotation
+        annotationFilter:
+          title: Filter by Annotation
+          type: string
+          description: Entities with specific annotation
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              metadata.annotations.backstage.io/managed-by-location: url:https://github.com/backstage/backstage
+
+    - title: Existence Filters
+      properties:
+        # Test 23: Has description (exists filter)
         hasDescription:
           title: Entities with Description
           type: string
-          description: Only shows entities that have a description
+          description: Only shows entities that have a description field
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
               metadata.description:
                 exists: true
 
-        # Test Case 15: Multiple catalog filters (OR condition)
-        multipleFilters:
-          title: Multiple Filters
+        # Test 24: Has spec.owner
+        hasOwner:
+          title: Entities with Owner
           type: string
-          description: Shows entities matching any of the filters
+          description: Only shows entities that have an owner defined
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
-              - kind: Component
-                spec.type: website
+              spec.owner:
+                exists: true
+
+        # Test 25: Has links
+        hasLinks:
+          title: Entities with Links
+          type: string
+          description: Only shows entities that have links defined
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              metadata.links:
+                exists: true
+
+    - title: Complex Array Filters (OR conditions)
+      properties:
+        # Test 26: Multiple filter objects (OR condition)
+        servicesOrWebsites:
+          title: Services OR Websites
+          type: string
+          description: Shows components that are either services OR websites
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
               - kind: Component
                 spec.type: service
-              - kind: System
+              - kind: Component
+                spec.type: website
 
-        # Test Case 16: Filter by tags
-        taggedEntities:
-          title: Tagged Entities
+        # Test 27: Complex OR filter
+        complexOrFilter:
+          title: Complex OR Filter
           type: string
-          description: Only shows entities with specific tags
+          description: Production services OR staging websites OR any system
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
-              metadata.tags:
-                - frontend
-                - website
+              - kind: Component
+                spec.type: service
+                spec.lifecycle: production
+              - kind: Component
+                spec.type: website
+                spec.lifecycle: staging
+              - kind: System
 
-    - title: Edge Cases and Special Configurations
+    - title: Relation Filters
       properties:
-        # Test Case 17: Disabled field
-        disabledEntity:
-          title: Disabled Entity Picker
+        # Test 28: Filter by relation
+        ownedByTeamA:
+          title: Owned by Team A
           type: string
-          description: This field is disabled
+          description: Entities owned by team-a
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              relations.ownedBy: group:default/team-a
+
+        # Test 29: Multiple owners
+        multipleOwners:
+          title: Multiple Possible Owners
+          type: string
+          description: Entities owned by either team-a or team-b
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              relations.ownedBy:
+                - group:default/team-a
+                - group:default/team-b
+
+    - title: Combined Filters and Edge Cases
+      properties:
+        # Test 30: Everything combined
+        complexFilter:
+          title: Complex Combined Filter
+          type: string
+          description: Production components with owner, tags, and description
+          ui:field: EntityPicker
+          ui:options:
+            allowArbitraryValues: false
+            defaultKind: Component
+            defaultNamespace: default
+            catalogFilter:
+              kind: Component
+              spec.lifecycle: production
+              spec.owner:
+                exists: true
+              metadata.description:
+                exists: true
+              metadata.tags:
+                - critical
+                - production
+
+        # Test 31: Disabled field
+        disabledEntity:
+          title: Disabled EntityPicker
+          type: string
+          description: This picker is disabled
           default: "Component:default/example-website"
           ui:field: EntityPicker
           ui:disabled: true
 
-        # Test Case 18: Read-only field
-        readonlyEntity:
-          title: Read-only Entity Picker
+        # Test 32: With all legacy options
+        legacyComplete:
+          title: Legacy Options Test
           type: string
-          description: This field is read-only
-          default: "System:default/example-system"
-          ui:field: EntityPicker
-          ui:readonly: true
-
-        # Test Case 19: With default value
-        withDefault:
-          title: Entity with Default
-          type: string
-          description: Has a pre-selected default entity
-          default: "Group:default/team-a"
+          description: Testing with legacy allowedKinds plus new options
           ui:field: EntityPicker
           ui:options:
-            allowArbitraryValues: false
+            allowedKinds:
+              - Component
+              - System
+            defaultKind: Component
+            defaultNamespace: legacy
+            allowArbitraryValues: true
 
-        # Test Case 20: Autofocus
-        autofocusEntity:
-          title: Autofocus Entity
-          type: string
-          description: This field gets focus when form loads
-          ui:field: EntityPicker
-          ui:autofocus: true
-
-    - title: Array Entity Picker Tests
+    - title: Field Arrays (Testing EntityPicker in arrays)
       properties:
-        # Test Case 21: Array of entities
+        # Test 33: Array of entities
         multipleEntities:
           title: Multiple Entities
           type: array
           description: Select multiple entities
           items:
             type: string
+            title: Entity
             ui:field: EntityPicker
             ui:options:
               catalogFilter:
                 kind: Component
 
-        # Test Case 22: Required array with min items
-        requiredMultiple:
-          title: Required Multiple Entities
+        # Test 34: Required array with constraints
+        requiredComponents:
+          title: Required Components (min 2)
           type: array
-          description: Must select at least 2 entities
+          description: Must select at least 2 components
           minItems: 2
+          maxItems: 5
           items:
             type: string
             ui:field: EntityPicker
             ui:options:
               allowArbitraryValues: false
+              catalogFilter:
+                kind: Component
+
+        # Test 35: EntityPicker with scaffolderTranslationRef usage
+        withTranslation:
+          title: With Translation Support
+          type: string
+          description: Tests translation functionality if available
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Component
 
   steps:
     - id: log
-      name: Log Entity Selections
+      name: Log All Entity Selections
       action: debug:log
       input:
         message: |
-          Entity Picker Test Results:
+          EntityPicker Comprehensive Test Results:
 
-          Basic Tests:
-          - Basic Entity: ${{ parameters.basicEntity }}
-          - Valid Entity Only: ${{ parameters.validEntityOnly }}
-          - Required Entity: ${{ parameters.requiredEntity }}
+          === Basic Features ===
+          Basic Entity: ${{ parameters.basicEntity }}
+          With Description: ${{ parameters.entityWithDescription }}
+          Required Entity: ${{ parameters.requiredEntity }}
 
-          Filtering Tests:
-          - Component Only: ${{ parameters.componentOnly }}
-          - Group or User: ${{ parameters.groupOrUser }}
-          - System Only (Legacy): ${{ parameters.systemOnlyLegacy }}
-          - Team Groups Only: ${{ parameters.teamGroupsOnly }}
-          - Production Services: ${{ parameters.productionServices }}
+          === Arbitrary Values ===
+          Allow Arbitrary (True): ${{ parameters.allowArbitraryTrue }}
+          Allow Arbitrary (False): ${{ parameters.allowArbitraryFalse }}
 
-          Default Values Tests:
-          - Default Kind System: ${{ parameters.defaultKindSystem }}
-          - Custom Namespace: ${{ parameters.customNamespace }}
-          - Full Defaults: ${{ parameters.fullDefaults }}
+          === Default Values ===
+          Default Kind System: ${{ parameters.defaultKindSystem }}
+          Custom Namespace: ${{ parameters.customNamespace }}
+          Full Defaults: ${{ parameters.fullDefaults }}
 
-          Owner Picker Tests:
-          - Owner Picker: ${{ parameters.ownerPicker }}
-          - Restricted Owner: ${{ parameters.restrictedOwner }}
+          === Single Kind Filters ===
+          Components Only: ${{ parameters.componentOnly }}
+          Systems Only: ${{ parameters.systemOnly }}
+          Legacy Allowed Kinds: ${{ parameters.legacyAllowedKinds }}
 
-          Advanced Filter Tests:
-          - Has Description: ${{ parameters.hasDescription }}
-          - Multiple Filters: ${{ parameters.multipleFilters }}
-          - Tagged Entities: ${{ parameters.taggedEntities }}
+          === Multiple Kinds ===
+          Groups and Users: ${{ parameters.multipleKinds }}
+          Many Kinds: ${{ parameters.manyKinds }}
 
-          Edge Cases:
-          - Disabled Entity: ${{ parameters.disabledEntity }}
-          - Readonly Entity: ${{ parameters.readonlyEntity }}
-          - With Default: ${{ parameters.withDefault }}
-          - Autofocus Entity: ${{ parameters.autofocusEntity }}
+          === Spec Filters ===
+          Service Components: ${{ parameters.serviceComponents }}
+          Team Groups: ${{ parameters.teamGroups }}
+          Production Websites: ${{ parameters.productionWebsites }}
 
-          Array Tests:
-          - Multiple Entities: ${{ parameters.multipleEntities }}
-          - Required Multiple: ${{ parameters.requiredMultiple }}
+          === Metadata Filters ===
+          Default Namespace: ${{ parameters.defaultNamespaceOnly }}
+          Production Namespace: ${{ parameters.productionNamespace }}
+          Frontend Tagged: ${{ parameters.frontendTagged }}
+          Multiple Tags: ${{ parameters.multipleTagsFilter }}
+
+          === Labels & Annotations ===
+          Label Filter: ${{ parameters.labelFilter }}
+          Annotation Filter: ${{ parameters.annotationFilter }}
+
+          === Existence Filters ===
+          Has Description: ${{ parameters.hasDescription }}
+          Has Owner: ${{ parameters.hasOwner }}
+          Has Links: ${{ parameters.hasLinks }}
+
+          === Complex Filters ===
+          Services or Websites: ${{ parameters.servicesOrWebsites }}
+          Complex OR: ${{ parameters.complexOrFilter }}
+
+          === Relations ===
+          Owned by Team A: ${{ parameters.ownedByTeamA }}
+          Multiple Owners: ${{ parameters.multipleOwners }}
+
+          === Edge Cases ===
+          Complex Filter: ${{ parameters.complexFilter }}
+          Disabled: ${{ parameters.disabledEntity }}
+          Legacy Complete: ${{ parameters.legacyComplete }}
+
+          === Arrays ===
+          Multiple Entities: ${{ parameters.multipleEntities }}
+          Required Components: ${{ parameters.requiredComponents }}
 
   output:
     remoteUrl: "https://github.com/backstage/backstage"
