@@ -1,25 +1,3 @@
-/*
- * Copyright 2021 The Backstage Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-import React, { useCallback, useEffect } from "react";
-import { TextField, Autocomplete, createFilterOptions } from "@mui/material";
-import { AutocompleteChangeReason } from "@mui/material/Autocomplete";
-import useAsync from "react-use/esm/useAsync";
-
-// Import all the actual Backstage dependencies
 import {
   type EntityFilterQuery,
   CATALOG_FILTER_EXISTS,
@@ -36,34 +14,214 @@ import {
   catalogApiRef,
   entityPresentationApiRef,
 } from "@backstage/plugin-catalog-react";
-
-// Translation imports - OPTION 1: If you're inside the scaffolder plugin
-// import { useTranslationRef } from '@backstage/core-plugin-api/alpha';
-// import { scaffolderTranslationRef } from '../../../translation';
-
-// Translation imports - OPTION 2: If translations are exported from the plugin
-// import { useTranslationRef } from '@backstage/core-plugin-api/alpha';
-// import { scaffolderTranslationRef } from '@backstage/plugin-scaffolder';
-
-// Translation imports - OPTION 3: Comment out if translations not available
-import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
-import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
-
-// Import schema types from the actual schema file
+import TextField from "@mui/material/TextField";
+import Autocomplete, {
+  AutocompleteChangeReason,
+  createFilterOptions,
+} from "@mui/material/Autocomplete";
+import { useCallback, useEffect } from "react";
+import useAsync from "react-use/esm/useAsync";
 import {
   EntityPickerFilterQueryValue,
   EntityPickerProps,
   EntityPickerUiOptions,
   EntityPickerFilterQuery,
 } from "./schema";
-
-// Import VirtualizedListbox from the actual component
-import { VirtualizedListbox } from "./VirtualizedListbox";
+import { VirtualizedListbox } from "../VirtualizedListbox";
+import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
+import { scaffolderTranslationRef } from "../../../translation";
+import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
 
 export { EntityPickerSchema } from "./schema";
 
-// If you can't import scaffolderTranslationRef, create a mock:
-const scaffolderTranslationRef = { id: "scaffolder" };
+/**
+ * The underlying component that is rendered in the form for the `EntityPicker`
+ * field extension.
+ *
+ * @public
+ */
+export const EntityPicker = (props: EntityPickerProps) => {
+  const { t } = useTranslationRef(scaffolderTranslationRef);
+  const {
+    onChange,
+    schema: {
+      title = t("fields.entityPicker.title"),
+      description = t("fields.entityPicker.description"),
+    },
+    required,
+    uiSchema,
+    rawErrors,
+    formData,
+    idSchema,
+    errors,
+  } = props;
+  const catalogFilter = buildCatalogFilter(uiSchema);
+  const defaultKind = uiSchema["ui:options"]?.defaultKind;
+  const defaultNamespace =
+    uiSchema["ui:options"]?.defaultNamespace || undefined;
+  const isDisabled = uiSchema?.["ui:disabled"] ?? false;
+
+  const catalogApi = useApi(catalogApiRef);
+  const entityPresentationApi = useApi(entityPresentationApiRef);
+
+  const { value: entities, loading } = useAsync(async () => {
+    const fields = [
+      "kind",
+      "metadata.name",
+      "metadata.namespace",
+      "metadata.title",
+      "metadata.description",
+      "spec.profile.displayName",
+      "spec.type",
+    ];
+    const { items } = await catalogApi.getEntities(
+      catalogFilter
+        ? { filter: catalogFilter, fields }
+        : { filter: undefined, fields }
+    );
+
+    const entityRefToPresentation = new Map<
+      string,
+      EntityRefPresentationSnapshot
+    >(
+      await Promise.all(
+        items.map(async (item) => {
+          const presentation = await entityPresentationApi.forEntity(item)
+            .promise;
+          return [stringifyEntityRef(item), presentation] as [
+            string,
+            EntityRefPresentationSnapshot
+          ];
+        })
+      )
+    );
+
+    return { catalogEntities: items, entityRefToPresentation };
+  });
+
+  const allowArbitraryValues =
+    uiSchema["ui:options"]?.allowArbitraryValues ?? true;
+
+  const getLabel = useCallback(
+    (freeSoloValue: string) => {
+      try {
+        // Will throw if defaultKind or defaultNamespace are not set
+        const parsedRef = parseEntityRef(freeSoloValue, {
+          defaultKind,
+          defaultNamespace,
+        });
+
+        return stringifyEntityRef(parsedRef);
+      } catch (err) {
+        return freeSoloValue;
+      }
+    },
+    [defaultKind, defaultNamespace]
+  );
+
+  const onSelect = useCallback(
+    (_: any, ref: string | Entity | null, reason: AutocompleteChangeReason) => {
+      // ref can either be a string from free solo entry or
+      if (typeof ref !== "string") {
+        // if ref does not exist: pass 'undefined' to trigger validation for required value
+        onChange(ref ? stringifyEntityRef(ref as Entity) : undefined);
+      } else {
+        if (reason === "blur" || reason === "create-option") {
+          // Add in default namespace, etc.
+          let entityRef = ref;
+          try {
+            // Attempt to parse the entity ref into it's full form.
+            entityRef = stringifyEntityRef(
+              parseEntityRef(ref as string, {
+                defaultKind,
+                defaultNamespace,
+              })
+            );
+          } catch (err) {
+            // If the passed in value isn't an entity ref, do nothing.
+          }
+          // We need to check against formData here as that's the previous value for this field.
+          if (formData !== ref || allowArbitraryValues) {
+            onChange(entityRef);
+          }
+        }
+      }
+    },
+    [onChange, formData, defaultKind, defaultNamespace, allowArbitraryValues]
+  );
+
+  // Since free solo can be enabled, attempt to parse as a full entity ref first, then fall
+  // back to the given value.
+  const selectedEntity =
+    entities?.catalogEntities.find((e) => stringifyEntityRef(e) === formData) ??
+    (allowArbitraryValues && formData ? getLabel(formData) : "");
+
+  useEffect(() => {
+    if (
+      required &&
+      !allowArbitraryValues &&
+      entities?.catalogEntities.length === 1 &&
+      selectedEntity === ""
+    ) {
+      onChange(stringifyEntityRef(entities.catalogEntities[0]));
+    }
+  }, [entities, onChange, selectedEntity, required, allowArbitraryValues]);
+
+  return (
+    <ScaffolderField
+      rawErrors={rawErrors}
+      rawDescription={uiSchema["ui:description"] ?? description}
+      required={required}
+      disabled={isDisabled}
+      errors={errors}
+    >
+      <Autocomplete
+        disabled={
+          isDisabled ||
+          (required &&
+            !allowArbitraryValues &&
+            entities?.catalogEntities.length === 1)
+        }
+        id={idSchema?.$id}
+        value={selectedEntity}
+        loading={loading}
+        onChange={onSelect}
+        options={entities?.catalogEntities || []}
+        getOptionLabel={(option) =>
+          // option can be a string due to freeSolo.
+          typeof option === "string"
+            ? option
+            : entities?.entityRefToPresentation.get(stringifyEntityRef(option))
+                ?.entityRef!
+        }
+        autoSelect
+        freeSolo={allowArbitraryValues}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={title}
+            margin="dense"
+            variant="outlined"
+            required={required}
+            disabled={isDisabled}
+            InputProps={params.InputProps}
+          />
+        )}
+        renderOption={(props, option) => (
+          <li {...props}>
+            <EntityDisplayName entityRef={option} />
+          </li>
+        )}
+        filterOptions={createFilterOptions<Entity>({
+          stringify: (option) =>
+            entities?.entityRefToPresentation.get(stringifyEntityRef(option))
+              ?.primaryTitle!,
+        })}
+        ListboxComponent={VirtualizedListbox}
+      />
+    </ScaffolderField>
+  );
+};
 
 /**
  * Converts a especial `{exists: true}` value to the `CATALOG_FILTER_EXISTS` symbol.
@@ -116,218 +274,19 @@ function convertSchemaFiltersToQuery(
 function buildCatalogFilter(
   uiSchema: EntityPickerProps["uiSchema"]
 ): EntityFilterQuery | undefined {
-  const uiOptions = uiSchema?.["ui:options"];
-  if (!uiOptions) return undefined;
+  const allowedKinds = uiSchema["ui:options"]?.allowedKinds;
 
-  const allowedKinds = uiOptions.allowedKinds;
-  const catalogFilter =
-    uiOptions.catalogFilter || (allowedKinds && { kind: allowedKinds });
+  const catalogFilter: EntityPickerUiOptions["catalogFilter"] | undefined =
+    uiSchema["ui:options"]?.catalogFilter ||
+    (allowedKinds && { kind: allowedKinds });
 
   if (!catalogFilter) {
     return undefined;
   }
 
   if (Array.isArray(catalogFilter)) {
-    return catalogFilter.map(convertSchemaFiltersToQuery) as any;
+    return catalogFilter.map(convertSchemaFiltersToQuery);
   }
 
   return convertSchemaFiltersToQuery(catalogFilter);
 }
-
-/**
- * The underlying component that is rendered in the form for the `EntityPicker`
- * field extension.
- *
- * @public
- */
-export const EntityPicker = (props: EntityPickerProps) => {
-  // Handle translations - with fallback
-  let t: (key: string) => string;
-  try {
-    const translationRef = useTranslationRef(scaffolderTranslationRef);
-    t = translationRef.t;
-  } catch {
-    // Fallback if translation hook not available
-    t = (key: string) => {
-      const translations: Record<string, string> = {
-        "fields.entityPicker.title": "Entity",
-        "fields.entityPicker.description": "Select an entity",
-      };
-      return translations[key] || key;
-    };
-  }
-
-  const {
-    onChange,
-    schema: {
-      title = t("fields.entityPicker.title"),
-      description = t("fields.entityPicker.description"),
-    },
-    required,
-    uiSchema,
-    rawErrors,
-    formData,
-    idSchema,
-    errors,
-  } = props;
-
-  const catalogFilter = buildCatalogFilter(uiSchema);
-  const uiOptions = uiSchema?.["ui:options"] || {};
-  const defaultKind = uiOptions.defaultKind;
-  const defaultNamespace = uiOptions.defaultNamespace || undefined;
-  const isDisabled = uiSchema?.["ui:disabled"] ?? false;
-
-  const catalogApi = useApi(catalogApiRef);
-  const entityPresentationApi = useApi(entityPresentationApiRef);
-
-  const { value: entities, loading } = useAsync(async () => {
-    const fields = [
-      "kind",
-      "metadata.name",
-      "metadata.namespace",
-      "metadata.title",
-      "metadata.description",
-      "spec.profile.displayName",
-      "spec.type",
-    ];
-    const { items } = await catalogApi.getEntities(
-      catalogFilter
-        ? { filter: catalogFilter, fields }
-        : { filter: undefined, fields }
-    );
-
-    const entityRefToPresentation = new Map<
-      string,
-      EntityRefPresentationSnapshot
-    >(
-      await Promise.all(
-        items.map(async (item) => {
-          const presentation = await entityPresentationApi.forEntity(item)
-            .promise;
-          return [stringifyEntityRef(item), presentation] as [
-            string,
-            EntityRefPresentationSnapshot
-          ];
-        })
-      )
-    );
-
-    return { catalogEntities: items, entityRefToPresentation };
-  });
-
-  const allowArbitraryValues = uiOptions.allowArbitraryValues ?? true;
-
-  const getLabel = useCallback(
-    (freeSoloValue: string) => {
-      try {
-        const parsedRef = parseEntityRef(freeSoloValue, {
-          defaultKind,
-          defaultNamespace,
-        });
-
-        return stringifyEntityRef(parsedRef);
-      } catch (err) {
-        return freeSoloValue;
-      }
-    },
-    [defaultKind, defaultNamespace]
-  );
-
-  const onSelect = useCallback(
-    (_: any, ref: string | Entity | null, reason: AutocompleteChangeReason) => {
-      if (typeof ref !== "string") {
-        onChange(ref ? stringifyEntityRef(ref as Entity) : undefined);
-      } else {
-        if (reason === "blur" || reason === "create-option") {
-          let entityRef = ref;
-          try {
-            entityRef = stringifyEntityRef(
-              parseEntityRef(ref as string, {
-                defaultKind,
-                defaultNamespace,
-              })
-            );
-          } catch (err) {
-            // If the passed in value isn't an entity ref, do nothing.
-          }
-          if (formData !== ref || allowArbitraryValues) {
-            onChange(entityRef);
-          }
-        }
-      }
-    },
-    [onChange, formData, defaultKind, defaultNamespace, allowArbitraryValues]
-  );
-
-  const selectedEntity =
-    entities?.catalogEntities.find((e) => stringifyEntityRef(e) === formData) ??
-    (allowArbitraryValues && formData ? getLabel(formData) : "");
-
-  useEffect(() => {
-    if (
-      required &&
-      !allowArbitraryValues &&
-      entities?.catalogEntities.length === 1 &&
-      selectedEntity === ""
-    ) {
-      onChange(stringifyEntityRef(entities.catalogEntities[0]));
-    }
-  }, [entities, onChange, selectedEntity, required, allowArbitraryValues]);
-
-  return (
-    <ScaffolderField
-      rawErrors={rawErrors}
-      rawDescription={uiSchema?.["ui:description"] ?? description}
-      required={required}
-      disabled={isDisabled}
-      errors={errors}
-    >
-      <Autocomplete
-        disabled={
-          isDisabled ||
-          (required &&
-            !allowArbitraryValues &&
-            entities?.catalogEntities.length === 1)
-        }
-        id={idSchema?.$id}
-        value={selectedEntity}
-        loading={loading}
-        onChange={onSelect}
-        options={entities?.catalogEntities || []}
-        getOptionLabel={(option) =>
-          typeof option === "string"
-            ? option
-            : entities?.entityRefToPresentation.get(stringifyEntityRef(option))
-                ?.entityRef!
-        }
-        autoSelect
-        freeSolo={allowArbitraryValues}
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label={title}
-            margin="dense"
-            variant="outlined"
-            required={required}
-            disabled={isDisabled}
-            InputProps={params.InputProps}
-          />
-        )}
-        renderOption={(props, option) => (
-          <li {...props}>
-            <EntityDisplayName entityRef={option} />
-          </li>
-        )}
-        filterOptions={createFilterOptions<Entity>({
-          stringify: (option) =>
-            entities?.entityRefToPresentation.get(stringifyEntityRef(option))
-              ?.primaryTitle!,
-        })}
-        ListboxComponent={VirtualizedListbox as any}
-      />
-    </ScaffolderField>
-  );
-};
-
-// Export enhanced version
-export const EnhancedEntityPicker = EntityPicker;
