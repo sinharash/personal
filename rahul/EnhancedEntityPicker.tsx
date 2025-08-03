@@ -29,11 +29,8 @@ import {
   catalogApiRef,
   entityPresentationApiRef,
 } from '@backstage/plugin-catalog-react';
-import TextField from '@material-ui/core/TextField';
-import Autocomplete, {
-  AutocompleteChangeReason,
-  createFilterOptions,
-} from '@material-ui/lab/Autocomplete';
+import { TextField, Autocomplete, createFilterOptions } from '@mui/material';
+import type { AutocompleteChangeReason } from '@mui/material';
 import { useCallback, useEffect } from 'react';
 import useAsync from 'react-use/esm/useAsync';
 import {
