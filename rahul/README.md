@@ -9,9 +9,57 @@ This enhanced version of the EntityPicker component adds support for custom disp
 - **Flexible Templates**: Support for both template syntax (`{{ field }}`) and fallback syntax (`field1 || field2`)
 - **Hidden Entity Reference**: Optionally store the full entity reference in a separate field
 
-## MUI v5 Migration Notes
+## ⚠️ Critical: Material-UI v4 vs MUI v5 Issues
 
-The EnhancedEntityPicker has been updated to use MUI v5 imports while Backstage core still uses Material-UI v4. This creates some considerations:
+### Current Situation
+
+The EnhancedEntityPicker currently uses MUI v5 imports while Backstage uses Material-UI v4. This causes several API incompatibilities beyond just imports:
+
+### Discovered API Breaking Changes
+
+1. **`renderOption` Signature Changed**
+   ```typescript
+   // Material-UI v4 (what Backstage uses)
+   renderOption={(option) => <Component />}
+   
+   // MUI v5 (current implementation)
+   renderOption={(props, option) => <li {...props}><Component /></li>}
+   ```
+
+2. **`AutocompleteChangeReason` Values Changed**
+   - v4: `'create-option'` (with dash)
+   - v5: `'createOption'` (camelCase)
+   - Other reason values may also differ
+
+3. **Type Inference Issues**
+   - MUI v5's TypeScript types don't align with Material-UI v4's component expectations
+   - This causes errors like "option is not assignable to parameter of type Entity"
+
+### Recommended Solution: Revert to Material-UI v4
+
+To match Backstage and avoid all API issues, change the imports back to Material-UI v4:
+
+```typescript
+// Change FROM (MUI v5):
+import { TextField, Autocomplete, createFilterOptions } from '@mui/material';
+import type { AutocompleteChangeReason } from '@mui/material';
+
+// Change TO (Material-UI v4):
+import TextField from '@material-ui/core/TextField';
+import Autocomplete, {
+  AutocompleteChangeReason,
+  createFilterOptions,
+} from '@material-ui/lab/Autocomplete';
+```
+
+**Benefits of reverting to v4:**
+- ✅ No API compatibility issues
+- ✅ Consistent with Backstage's component library
+- ✅ No visual differences
+- ✅ No bundle size increase
+- ✅ All TypeScript types align correctly
+
+## MUI v5 Migration Notes (If You Must Use v5)
 
 ### Import Changes Made
 
