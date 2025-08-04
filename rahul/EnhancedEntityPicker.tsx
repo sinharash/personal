@@ -16,71 +16,72 @@
 import {
   type EntityFilterQuery,
   CATALOG_FILTER_EXISTS,
-} from '@backstage/catalog-client';
+} from "@backstage/catalog-client";
 import {
   Entity,
   parseEntityRef,
   stringifyEntityRef,
-} from '@backstage/catalog-model';
-import { useApi } from '@backstage/core-plugin-api';
+} from "@backstage/catalog-model";
+import { useApi } from "@backstage/core-plugin-api";
 import {
   EntityDisplayName,
   EntityRefPresentationSnapshot,
   catalogApiRef,
   entityPresentationApiRef,
-} from '@backstage/plugin-catalog-react';
-import { TextField, Autocomplete, createFilterOptions } from '@mui/material';
-import type { AutocompleteChangeReason } from '@mui/material';
-import { useCallback, useEffect } from 'react';
-import useAsync from 'react-use/esm/useAsync';
+} from "@backstage/plugin-catalog-react";
+import { TextField, Autocomplete, createFilterOptions } from "@mui/material";
+import type { AutocompleteChangeReason } from "@mui/material";
+import { useCallback, useEffect } from "react";
+import useAsync from "react-use/esm/useAsync";
 import {
   EntityPickerFilterQueryValue,
   EnhancedEntityPickerProps,
   EnhancedEntityPickerUiOptions,
   EntityPickerFilterQuery,
-} from './enhanced-schema';
-import { VirtualizedListbox } from '../VirtualizedListbox';
-import { useTranslationRef } from '@backstage/core-plugin-api/alpha';
-import { scaffolderTranslationRef } from '../../../translation';
-import { ScaffolderField } from '@backstage/plugin-scaffolder-react/alpha';
+} from "./enhanced-schema";
+import { VirtualizedListbox } from "../VirtualizedListbox";
+import { useTranslationRef } from "@backstage/core-plugin-api/alpha";
+import { scaffolderTranslationRef } from "../../../translation";
+import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
 
-export { EnhancedEntityPickerSchema } from './enhanced-schema';
+export { EnhancedEntityPickerSchema } from "./enhanced-schema";
 
 // Utility functions for display formatting
 const getNestedValue = (obj: any, path: string): any => {
   if (!obj || !path) return undefined;
   try {
-    return path.split('.').reduce((current, key) => {
-      return current && typeof current === 'object' ? current[key] : undefined;
+    return path.split(".").reduce((current, key) => {
+      return current && typeof current === "object" ? current[key] : undefined;
     }, obj);
   } catch {
     return undefined;
   }
 };
 
+// convert template strings with {{ }} placeholders into display text
 const formatDisplayValue = (template: string, entity: Entity): string => {
   if (!template || !entity) {
-    return entity?.metadata?.title || entity?.metadata?.name || '';
+    return entity?.metadata?.title || entity?.metadata?.name || "";
   }
 
   try {
     // Handle fallback syntax: "property1 || property2"
-    if (template.includes(' || ')) {
-      const paths = template.split(' || ').map(p => p.trim());
+    if (template.includes(" || ")) {
+      const paths = template.split(" || ").map((p) => p.trim());
       for (const path of paths) {
         const value = getNestedValue(entity, path);
         if (value && String(value).trim()) return String(value);
       }
-      return entity?.metadata?.name || '';
+      return entity?.metadata?.name || "";
     }
 
     // Handle template syntax: "{{ property }}"
     return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expression) => {
       const value = getNestedValue(entity, expression.trim());
-      return value ? String(value) : '';
+      return value ? String(value) : "";
     });
   } catch {
-    return entity?.metadata?.name || '';
+    return entity?.metadata?.name || "";
   }
 };
 
@@ -95,8 +96,8 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
   const {
     onChange,
     schema: {
-      title = t('fields.entityPicker.title'),
-      description = t('fields.entityPicker.description'),
+      title = t("fields.entityPicker.title"),
+      description = t("fields.entityPicker.description"),
     },
     required,
     uiSchema,
@@ -107,33 +108,33 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
     errors,
   } = props;
   const catalogFilter = buildCatalogFilter(uiSchema);
-  const defaultKind = uiSchema['ui:options']?.defaultKind;
+  const defaultKind = uiSchema["ui:options"]?.defaultKind;
   const defaultNamespace =
-    uiSchema['ui:options']?.defaultNamespace || undefined;
-  const isDisabled = uiSchema?.['ui:disabled'] ?? false;
-  
+    uiSchema["ui:options"]?.defaultNamespace || undefined;
+  const isDisabled = uiSchema?.["ui:disabled"] ?? false;
+
   // Enhanced options
-  const displayFormat = uiSchema['ui:options']?.displayFormat;
-  const hiddenEntityRef = uiSchema['ui:options']?.hiddenEntityRef;
+  const displayFormat = uiSchema["ui:options"]?.displayFormat;
+  const hiddenEntityRef = uiSchema["ui:options"]?.hiddenEntityRef;
 
   const catalogApi = useApi(catalogApiRef);
   const entityPresentationApi = useApi(entityPresentationApiRef);
 
   const { value: entities, loading } = useAsync(async () => {
     const fields = [
-      'kind',
-      'metadata.name',
-      'metadata.namespace',
-      'metadata.title',
-      'metadata.description',
-      'spec.profile.displayName',
-      'spec.profile.email',
-      'spec.type',
+      "kind",
+      "metadata.name",
+      "metadata.namespace",
+      "metadata.title",
+      "metadata.description",
+      "spec.profile.displayName",
+      "spec.profile.email",
+      "spec.type",
     ];
     const { items } = await catalogApi.getEntities(
       catalogFilter
         ? { filter: catalogFilter, fields }
-        : { filter: undefined, fields },
+        : { filter: undefined, fields }
     );
 
     const entityRefToPresentation = new Map<
@@ -141,22 +142,22 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
       EntityRefPresentationSnapshot
     >(
       await Promise.all(
-        items.map(async item => {
+        items.map(async (item) => {
           const presentation = await entityPresentationApi.forEntity(item)
             .promise;
           return [stringifyEntityRef(item), presentation] as [
             string,
-            EntityRefPresentationSnapshot,
+            EntityRefPresentationSnapshot
           ];
-        }),
-      ),
+        })
+      )
     );
 
     return { catalogEntities: items, entityRefToPresentation };
   });
 
   const allowArbitraryValues =
-    uiSchema['ui:options']?.allowArbitraryValues ?? true;
+    uiSchema["ui:options"]?.allowArbitraryValues ?? true;
 
   const getLabel = useCallback(
     (freeSoloValue: string) => {
@@ -172,13 +173,13 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
         return freeSoloValue;
       }
     },
-    [defaultKind, defaultNamespace],
+    [defaultKind, defaultNamespace]
   );
 
   const onSelect = useCallback(
     (_: any, ref: string | Entity | null, reason: AutocompleteChangeReason) => {
       // ref can either be a string from free solo entry or Entity object
-      if (typeof ref !== 'string') {
+      if (typeof ref !== "string") {
         if (!ref) {
           // if ref does not exist: pass 'undefined' to trigger validation for required value
           onChange(undefined);
@@ -189,14 +190,14 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
         if (displayFormat) {
           const displayValue = formatDisplayValue(displayFormat, ref);
           onChange(displayValue);
-          
+
           // Store entity reference in hidden field if specified
           if (hiddenEntityRef && formContext?.formData) {
             try {
               const entityRef = stringifyEntityRef(ref);
               formContext.formData[hiddenEntityRef] = entityRef;
             } catch (error) {
-              console.warn('Failed to store entity reference:', error);
+              console.warn("Failed to store entity reference:", error);
             }
           }
         } else {
@@ -204,7 +205,7 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
           onChange(stringifyEntityRef(ref));
         }
       } else {
-        if (reason === 'blur' || reason === 'create-option') {
+        if (reason === "blur" || reason === "create-option") {
           // Add in default namespace, etc.
           let entityRef = ref;
           try {
@@ -213,7 +214,7 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
               parseEntityRef(ref as string, {
                 defaultKind,
                 defaultNamespace,
-              }),
+              })
             );
           } catch (err) {
             // If the passed in value isn't an entity ref, do nothing.
@@ -225,22 +226,33 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
         }
       }
     },
-    [onChange, formData, formContext, defaultKind, defaultNamespace, allowArbitraryValues, displayFormat, hiddenEntityRef],
+    [
+      onChange,
+      formData,
+      formContext,
+      defaultKind,
+      defaultNamespace,
+      allowArbitraryValues,
+      displayFormat,
+      hiddenEntityRef,
+    ]
   );
 
   // Enhanced selectedEntity logic to handle both entity refs and display values
   const selectedEntity = (() => {
     if (!formData || !entities?.catalogEntities.length) {
-      return allowArbitraryValues && formData ? getLabel(formData) : '';
+      return allowArbitraryValues && formData ? getLabel(formData) : "";
     }
 
     // Try to find by entity reference first (original logic)
-    const entityByRef = entities.catalogEntities.find(e => stringifyEntityRef(e) === formData);
+    const entityByRef = entities.catalogEntities.find(
+      (e) => stringifyEntityRef(e) === formData
+    );
     if (entityByRef) return entityByRef;
 
     // If displayFormat is used, try to find by display value
     if (displayFormat) {
-      const entityByDisplay = entities.catalogEntities.find(e => {
+      const entityByDisplay = entities.catalogEntities.find((e) => {
         const displayValue = formatDisplayValue(displayFormat, e);
         return displayValue === formData;
       });
@@ -248,7 +260,7 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
     }
 
     // Fallback to original logic
-    return allowArbitraryValues && formData ? getLabel(formData) : '';
+    return allowArbitraryValues && formData ? getLabel(formData) : "";
   })();
 
   useEffect(() => {
@@ -256,26 +268,36 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
       required &&
       !allowArbitraryValues &&
       entities?.catalogEntities.length === 1 &&
-      selectedEntity === ''
+      selectedEntity === ""
     ) {
       const singleEntity = entities.catalogEntities[0];
       if (displayFormat) {
         const displayValue = formatDisplayValue(displayFormat, singleEntity);
         onChange(displayValue);
-        
+
         if (hiddenEntityRef && formContext?.formData) {
-          formContext.formData[hiddenEntityRef] = stringifyEntityRef(singleEntity);
+          formContext.formData[hiddenEntityRef] =
+            stringifyEntityRef(singleEntity);
         }
       } else {
         onChange(stringifyEntityRef(singleEntity));
       }
     }
-  }, [entities, onChange, selectedEntity, required, allowArbitraryValues, displayFormat, hiddenEntityRef, formContext]);
+  }, [
+    entities,
+    onChange,
+    selectedEntity,
+    required,
+    allowArbitraryValues,
+    displayFormat,
+    hiddenEntityRef,
+    formContext,
+  ]);
 
   return (
     <ScaffolderField
       rawErrors={rawErrors}
-      rawDescription={uiSchema['ui:description'] ?? description}
+      rawDescription={uiSchema["ui:description"] ?? description}
       required={required}
       disabled={isDisabled}
       errors={errors}
@@ -292,9 +314,9 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
         loading={loading}
         onChange={onSelect}
         options={entities?.catalogEntities || []}
-        getOptionLabel={option =>
+        getOptionLabel={(option) =>
           // option can be a string due to freeSolo.
-          typeof option === 'string'
+          typeof option === "string"
             ? option
             : displayFormat
             ? formatDisplayValue(displayFormat, option)
@@ -303,7 +325,7 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
         }
         autoSelect
         freeSolo={allowArbitraryValues}
-        renderInput={params => (
+        renderInput={(params) => (
           <TextField
             {...params}
             label={title}
@@ -314,7 +336,7 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
             InputProps={params.InputProps}
           />
         )}
-        renderOption={option => 
+        renderOption={(option) =>
           displayFormat ? (
             <span>{formatDisplayValue(displayFormat, option)}</span>
           ) : (
@@ -322,11 +344,12 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
           )
         }
         filterOptions={createFilterOptions<Entity>({
-          stringify: option =>
+          stringify: (option) =>
             displayFormat
               ? formatDisplayValue(displayFormat, option)
-              : entities?.entityRefToPresentation.get(stringifyEntityRef(option))
-                  ?.primaryTitle!,
+              : entities?.entityRefToPresentation.get(
+                  stringifyEntityRef(option)
+                )?.primaryTitle!,
         })}
         ListboxComponent={VirtualizedListbox}
       />
@@ -341,9 +364,9 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
  * @returns The converted value.
  */
 function convertOpsValues(
-  value: Exclude<EntityPickerFilterQueryValue, Array<any>>,
+  value: Exclude<EntityPickerFilterQueryValue, Array<any>>
 ): string | symbol {
-  if (typeof value === 'object' && value.exists) {
+  if (typeof value === "object" && value.exists) {
     return CATALOG_FILTER_EXISTS;
   }
   return value?.toString();
@@ -359,7 +382,7 @@ function convertOpsValues(
  * transformed to `CATALOG_FILTER_EXISTS` symbol.
  */
 function convertSchemaFiltersToQuery(
-  schemaFilters: EntityPickerFilterQuery,
+  schemaFilters: EntityPickerFilterQuery
 ): Exclude<EntityFilterQuery, Array<any>> {
   const query: EntityFilterQuery = {};
 
@@ -383,12 +406,14 @@ function convertSchemaFiltersToQuery(
  * @returns An `EntityFilterQuery` based on the `uiSchema`, or `undefined` if `catalogFilter` is not specified in the `uiSchema`.
  */
 function buildCatalogFilter(
-  uiSchema: EnhancedEntityPickerProps['uiSchema'],
+  uiSchema: EnhancedEntityPickerProps["uiSchema"]
 ): EntityFilterQuery | undefined {
-  const allowedKinds = uiSchema['ui:options']?.allowedKinds;
+  const allowedKinds = uiSchema["ui:options"]?.allowedKinds;
 
-  const catalogFilter: EnhancedEntityPickerUiOptions['catalogFilter'] | undefined =
-    uiSchema['ui:options']?.catalogFilter ||
+  const catalogFilter:
+    | EnhancedEntityPickerUiOptions["catalogFilter"]
+    | undefined =
+    uiSchema["ui:options"]?.catalogFilter ||
     (allowedKinds && { kind: allowedKinds });
 
   if (!catalogFilter) {

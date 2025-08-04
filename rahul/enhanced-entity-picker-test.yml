@@ -12,7 +12,6 @@ spec:
     - title: "🔍 Entity Picker Comparison Test"
       description: "Compare original vs enhanced EntityPicker behavior side by side"
       properties:
-        
         # Original EntityPicker (baseline)
         originalPicker:
           title: "1. Original EntityPicker"
@@ -23,7 +22,7 @@ spec:
             catalogFilter:
               kind: User
             allowArbitraryValues: false
-        
+
         # Enhanced EntityPicker without formatting (should behave identically)
         enhancedBasic:
           title: "2. Enhanced EntityPicker (Basic Mode)"
@@ -34,10 +33,10 @@ spec:
             catalogFilter:
               kind: User
             allowArbitraryValues: false
-        
-        # Enhanced EntityPicker with title formatting
+
+        # Enhanced EntityPicker with formatting
         enhancedWithTitle:
-          title: "3. Enhanced EntityPicker (Title Format)"
+          title: "3. Enhanced EntityPicker User"
           type: string
           description: "Shows entity title instead of reference"
           ui:field: EnhancedEntityPicker
@@ -45,92 +44,95 @@ spec:
             catalogFilter:
               kind: User
             allowArbitraryValues: false
-            displayFormat: "{{ metadata.title }}"
-            hiddenEntityRef: "enhancedWithTitleRef"
-        
-        # Enhanced EntityPicker with complex formatting
-        enhancedWithTemplate:
-          title: "4. Enhanced EntityPicker (Template Format)"
+            displayFormat: "name: {{ metadata.name }} - email: {{ spec.profile.email }}"
+            hiddenEntityRef: "enhancedHiddenUser"
+        enhancedHiddenUser:
           type: string
-          description: "Shows custom formatted display with email"
+          ui:widget: hidden
+          ui:backstage:
+            review:
+              show: false
+        # Enhanced EntityPicker
+        enhancedWithTemplate:
+          title: "4. Enhanced EntityPicker Resource"
+          type: string
+          description: "Shows custom formatted display"
           ui:field: EnhancedEntityPicker
           ui:options:
             catalogFilter:
-              kind: User
+              kind: Resource
             allowArbitraryValues: false
-            displayFormat: "📧 {{ metadata.title }} - {{ spec.profile.email }}"
-            hiddenEntityRef: "enhancedWithTemplateRef"
-        
+            displayFormat: "📧 {{ metadata.account_id }}"
+            hiddenEntityRef: "enhancedHiddenResource"
+        enhancedHiddenResource:
+          type: string
+          ui:widget: hidden
+          ui:backstage:
+            review:
+              show: false
+
         # Enhanced EntityPicker with fallback syntax
         enhancedWithFallback:
           title: "5. Enhanced EntityPicker (Fallback Format)"
           type: string
-          description: "Uses fallback syntax: title || displayName || name"
+          description: "Uses fallback syntax"
           ui:field: EnhancedEntityPicker
           ui:options:
             catalogFilter:
-              kind: User
+              kind: System
             allowArbitraryValues: false
-            displayFormat: "metadata.title || spec.profile.displayName || metadata.name"
-            hiddenEntityRef: "enhancedWithFallbackRef"
-
-    - title: "📋 Results Review"
-      description: "Review what gets stored in each field"
-      properties:
-        reviewNote:
-          title: "Expected Results"
+            displayFormat: "{{ metadata.title || metadata.annotations.overdue-review || spec.owner }}"
+            hiddenEntityRef: "enhancedHiddenSystem"
+        enhancedHiddenSystem:
           type: string
-          description: |
-            After selecting the same user in all fields above:
-            
-            1. originalPicker: "user:default/john.doe"
-            2. enhancedBasic: "user:default/john.doe" (same as #1)
-            3. enhancedWithTitle: "John Doe" (+ hidden field with entity ref)
-            4. enhancedWithTemplate: "📧 John Doe - john@company.com" (+ hidden field)
-            5. enhancedWithFallback: "John Doe" or fallback value (+ hidden field)
-          ui:widget: textarea
-          ui:options:
-            rows: 8
-          default: |
-            Test Instructions:
-            1. Select the same user in fields 1-5 above
-            2. Click "Review" to see what values are stored
-            3. Verify enhanced fields show human-readable values
-            4. Check that hidden entity reference fields are populated
-            5. Confirm enhanced basic mode works exactly like original
+          ui:widget: hidden
+          ui:backstage:
+            review:
+              show: false
 
   steps:
+    - id: fetch-user
+      name: Fetch user details
+      action: catalog:fetch
+      input:
+        entityRef: "${{ parameters.enhancedHiddenUser }}"
+
     - id: debug
-      name: Debug Output
+      name: Debug Output fetch user
       action: debug:log
       input:
         message: |
-          Field Values Comparison:
-          
+          Field Values:
+
           Original EntityPicker: ${{ parameters.originalPicker }}
           Enhanced Basic: ${{ parameters.enhancedBasic }}
-          Enhanced Title: ${{ parameters.enhancedWithTitle }}
-          Enhanced Template: ${{ parameters.enhancedWithTemplate }}
-          Enhanced Fallback: ${{ parameters.enhancedWithFallback }}
-          
-          Hidden Entity References:
-          Title Ref: ${{ parameters.enhancedWithTitleRef }}
-          Template Ref: ${{ parameters.enhancedWithTemplateRef }}
-          Fallback Ref: ${{ parameters.enhancedWithFallbackRef }}
+          Enhanced User: ${{ parameters.enhancedUser }}
+          Enhanced Resource: ${{ parameters.enhancedResource }}
+          Enhanced Fallback System: ${{ parameters.enhancedWithFallback }}
 
-  output:
-    text:
-      - title: Test Results
-        content: |
-          ## Enhanced EntityPicker Test Results
-          
-          **Original**: `${{ parameters.originalPicker }}`
-          **Enhanced Basic**: `${{ parameters.enhancedBasic }}`
-          **Enhanced Title**: `${{ parameters.enhancedWithTitle }}`
-          **Enhanced Template**: `${{ parameters.enhancedWithTemplate }}`
-          **Enhanced Fallback**: `${{ parameters.enhancedWithFallback }}`
-          
-          ### Hidden Entity References
-          - Title Hidden: `${{ parameters.enhancedWithTitleRef }}`
-          - Template Hidden: `${{ parameters.enhancedWithTemplateRef }}`
-          - Fallback Hidden: `${{ parameters.enhancedWithFallbackRef }}`
+          Hidden Entity References:
+          HiddenUser: ${{ parameters.enhancedHiddenUser }}
+          HiddenResource: ${{ parameters.enhancedHiddenResource }}
+          HiddenSystem: ${{ parameters.enhancedHiddenSystem }}
+
+          User details:
+          Name: ${{ steps['fetch-user'].output.entity.metadata.name }}
+          Email: ${{ steps['fetch-user'].output.entity.spec.profile.email }}
+          Department: ${{ steps['fetch-user'].output.entity.spec.profile.department }}
+
+  # output:
+  #   text:
+  #     - title: Test Results
+  #       content: |
+  #         ## Enhanced EntityPicker Test Results
+
+  #         **Original**: `${{ parameters.originalPicker }}`
+  #         **Enhanced Basic**: `${{ parameters.enhancedBasic }}`
+  #         **Enhanced Title**: `${{ parameters.enhancedWithTitle }}`
+  #         **Enhanced Template**: `${{ parameters.enhancedWithTemplate }}`
+  #         **Enhanced Fallback**: `${{ parameters.enhancedWithFallback }}`
+
+  #         ### Hidden Entity References
+  #         - Title Hidden: `${{ parameters.enhancedWithTitleRef }}`
+  #         - Template Hidden: `${{ parameters.enhancedWithTemplateRef }}`
+  #         - Fallback Hidden: `${{ parameters.enhancedWithFallbackRef }}`
