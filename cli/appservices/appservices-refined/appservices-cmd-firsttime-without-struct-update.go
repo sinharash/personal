@@ -91,26 +91,26 @@ func displayTableUI(services []merna.ApplicationServices) {
 		return
 	}
 
-	// Define table columns
+	// Define table columns with appropriate widths
 	columns := []table.Column{
-		{Title: "Name", Width: 30},
-		{Title: "ID", Width: 15},
+		{Title: "Name", Width: 35},
 		{Title: "Type", Width: 20},
+		{Title: "Capability", Width: 20},
 		{Title: "Status", Width: 15},
 		{Title: "Environment", Width: 15},
+		{Title: "Created By", Width: 20},
 	}
 
 	// Convert services to table rows
 	rows := make([]table.Row, 0, len(services))
 	for _, svc := range services {
-		// Extract relevant fields - adjust based on your ApplicationServices struct
-		// This is an example - modify based on actual fields in your struct
 		row := table.Row{
-			getFieldValue(svc, "Name"),
-			getFieldValue(svc, "ID"),
-			getFieldValue(svc, "Type"),
-			getFieldValue(svc, "Status"),
-			getFieldValue(svc, "Environment"),
+			truncateString(svc.Name, 35),
+			svc.Type,
+			svc.Capability,
+			svc.Status,
+			svc.Environment,
+			svc.CreatedBy,
 		}
 		rows = append(rows, row)
 	}
@@ -120,8 +120,8 @@ func displayTableUI(services []merna.ApplicationServices) {
 		Title:   fmt.Sprintf("Application Services (Total: %d)", len(services)),
 		Columns: columns,
 		Rows:    rows,
-		Width:   100,
-		Height:  20,
+		Width:   130, // Increased width to accommodate all columns
+		Height:  25,
 	}
 
 	if err := tableui.ShowTable(config); err != nil {
@@ -129,20 +129,13 @@ func displayTableUI(services []merna.ApplicationServices) {
 	}
 }
 
-// Helper function to safely extract field values
-// Modify this based on your actual ApplicationServices struct
-func getFieldValue(svc merna.ApplicationServices, field string) string {
-	// This is a placeholder - replace with actual field access
-	// For example:
-	// switch field {
-	// case "Name":
-	//     return svc.Name
-	// case "ID":
-	//     return svc.ID
-	// default:
-	//     return ""
-	// }
-	
-	// For now, returning a placeholder
-	return fmt.Sprintf("%s-value", field)
+// Helper function to truncate long strings for table display
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
