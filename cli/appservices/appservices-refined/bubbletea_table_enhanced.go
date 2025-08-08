@@ -1,5 +1,5 @@
 // Package table provides a reusable bubbletea table component
-// with borders, mouse support, and pagination
+// with clean borders and pagination
 package table
 
 import (
@@ -29,7 +29,7 @@ type TableConfig struct {
 	Title          string
 	Columns        []table.Column
 	Rows           []table.Row
-	Width          int  // Optional: defaults to 100
+	Width          int  // Optional: defaults to auto-calculate based on columns
 	Height         int  // Optional: defaults to 20
 	RowsPerPage    int  // Optional: defaults to 10 (0 means no pagination)
 	ShowPagination bool // Optional: defaults to true if RowsPerPage > 0
@@ -37,10 +37,17 @@ type TableConfig struct {
 
 // New creates a new table model with the given configuration
 func New(config TableConfig) TableModel {
-	// Set defaults if not provided
+	// Calculate total width needed if not provided
 	if config.Width == 0 {
-		config.Width = 100
+		totalWidth := 0
+		for _, col := range config.Columns {
+			totalWidth += col.Width
+		}
+		// Add some padding for borders and margins
+		config.Width = totalWidth + len(config.Columns) + 10
 	}
+	
+	// Set height default
 	if config.Height == 0 {
 		config.Height = 20
 	}
@@ -52,46 +59,41 @@ func New(config TableConfig) TableModel {
 	}
 	
 	// Calculate table height (leave room for title, borders, and pagination)
-	tableHeight := config.Height - 6
+	tableHeight := config.Height - 4
 	if showPagination {
-		tableHeight -= 2
+		tableHeight -= 3
 	}
 	
 	// Get initial page of rows
 	displayRows := getPageRows(config.Rows, 0, config.RowsPerPage)
 
-	// Create the table with enhanced styles
+	// Create the table with clean styles
 	t := table.New(
 		table.WithColumns(config.Columns),
 		table.WithRows(displayRows),
 		table.WithFocused(true),
 		table.WithHeight(tableHeight),
-		table.WithWidth(config.Width),
 	)
 
-	// Apply enhanced styles with borders
+	// Apply clean table styles - no individual cell borders
 	s := table.DefaultStyles()
 	
-	// Header style with border
+	// Header style - bold with bottom border only
 	s.Header = s.Header.
-		BorderStyle(lipgloss.ThickBorder()).
+		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		BorderBottom(true).
+		BorderTop(false).
+		BorderLeft(false).
+		BorderRight(false).
 		Foreground(lipgloss.Color("229")).
-		Bold(true).
-		Align(lipgloss.Center)
+		Bold(true)
 	
-	// Selected row style
+	// Selected row style - highlight entire row
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
 		Bold(false)
-	
-	// Cell style with borders
-	s.Cell = s.Cell.
-		Padding(0, 1). // Add padding inside cells
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240"))
 	
 	t.SetStyles(s)
 
@@ -108,12 +110,12 @@ func New(config TableConfig) TableModel {
 	}
 }
 
-// Init implements tea.Model with mouse support
+// Init implements tea.Model
 func (m TableModel) Init() tea.Cmd {
-	return tea.EnableMouseCellMotion
+	return nil
 }
 
-// Update implements tea.Model with pagination and mouse support
+// Update implements tea.Model with pagination support
 func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	
@@ -135,39 +137,14 @@ func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateTableRows()
 			}
 		}
-	
-	case tea.MouseMsg:
-		// Handle mouse events for pagination buttons
-		if m.showPagination {
-			// Check if click is in pagination area (bottom of table)
-			if msg.Type == tea.MouseButtonPress {
-				// Simple detection for left/right pagination clicks
-				// You can refine this based on exact positions
-				if msg.Y >= m.height-3 {
-					if msg.X < m.width/2 && m.currentPage > 0 {
-						// Clicked on left side - previous page
-						m.currentPage--
-						m.updateTableRows()
-					} else if msg.X > m.width/2 && m.hasNextPage() {
-						// Clicked on right side - next page
-						m.currentPage++
-						m.updateTableRows()
-					}
-				}
-			}
-		}
-		// Pass mouse events to table for row selection
-		m.table, cmd = m.table.Update(msg)
-		return m, cmd
 		
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		tableHeight := msg.Height - 6
+		tableHeight := msg.Height - 4
 		if m.showPagination {
-			tableHeight -= 2
+			tableHeight -= 3
 		}
-		m.table.SetWidth(msg.Width)
 		m.table.SetHeight(tableHeight)
 	}
 	
@@ -175,7 +152,7 @@ func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View implements tea.Model with bordered table
+// View implements tea.Model with clean bordered table
 func (m TableModel) View() string {
 	// Define styles
 	titleStyle := lipgloss.NewStyle().
@@ -185,11 +162,10 @@ func (m TableModel) View() string {
 		Align(lipgloss.Center).
 		MarginBottom(1)
 
-	// Table container with border
-	tableBoxStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62")).
-		Padding(1, 2).
+	// Simple border style for the entire table
+	tableBorderStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
 		Width(m.width)
 
 	// Help text style
@@ -200,34 +176,38 @@ func (m TableModel) View() string {
 		MarginTop(1)
 
 	// Build the view
-	var s strings.Builder
+	var content strings.Builder
 	
 	// Title
 	if m.title != "" {
-		s.WriteString(titleStyle.Render(m.title))
-		s.WriteString("\n")
+		content.WriteString(titleStyle.Render(m.title))
+		content.WriteString("\n")
 	}
 	
-	// Table with border
-	tableContent := m.table.View()
+	// Table content
+	tableView := m.table.View()
 	
-	// Add pagination info if enabled
+	// Add pagination if enabled
 	if m.showPagination {
-		tableContent += "\n" + m.renderPagination()
+		paginationView := m.renderPagination()
+		// Combine table and pagination in the bordered box
+		tableWithPagination := tableView + "\n\n" + paginationView
+		content.WriteString(tableBorderStyle.Render(tableWithPagination))
+	} else {
+		// Just the table in the bordered box
+		content.WriteString(tableBorderStyle.Render(tableView))
 	}
-	
-	s.WriteString(tableBoxStyle.Render(tableContent))
 	
 	// Help text
 	helpText := "↑/↓: navigate rows • "
 	if m.showPagination {
 		helpText += "←/→: change page • "
 	}
-	helpText += "mouse: click to select • q: quit"
-	s.WriteString("\n")
-	s.WriteString(helpStyle.Render(helpText))
+	helpText += "q: quit"
+	content.WriteString("\n")
+	content.WriteString(helpStyle.Render(helpText))
 	
-	return s.String()
+	return content.String()
 }
 
 // renderPagination creates the pagination controls
@@ -236,46 +216,38 @@ func (m TableModel) renderPagination() string {
 	startRow := m.currentPage*m.rowsPerPage + 1
 	endRow := startRow + len(m.table.Rows()) - 1
 	
-	// Pagination style
-	paginationStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Width(m.width - 6). // Account for table padding
-		Align(lipgloss.Center)
-	
 	// Button styles
 	activeButtonStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 	
 	disabledButtonStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("238")).
-		Padding(0, 1)
+		Foreground(lipgloss.Color("238"))
 	
 	// Create pagination display
-	var leftArrow, rightArrow string
+	var leftArrow, rightArrow, pageInfo string
 	
 	if m.currentPage > 0 {
-		leftArrow = activeButtonStyle.Render("◀ Previous")
+		leftArrow = activeButtonStyle.Render("◄ Previous")
 	} else {
-		leftArrow = disabledButtonStyle.Render("◀ Previous")
+		leftArrow = disabledButtonStyle.Render("◄ Previous")
 	}
 	
 	if m.hasNextPage() {
-		rightArrow = activeButtonStyle.Render("Next ▶")
+		rightArrow = activeButtonStyle.Render("Next ►")
 	} else {
-		rightArrow = disabledButtonStyle.Render("Next ▶")
+		rightArrow = disabledButtonStyle.Render("Next ►")
 	}
 	
-	pageInfo := fmt.Sprintf("  %d-%d of %d  ", startRow, endRow, m.totalRows)
+	pageInfo = fmt.Sprintf("%d-%d of %d", startRow, endRow, m.totalRows)
 	
-	// Center the page info with arrows on sides
-	pagination := leftArrow + 
-		lipgloss.NewStyle().
-			Width(m.width - 30).
-			Align(lipgloss.Center).
-			Render(pageInfo) + 
-		rightArrow
+	// Create centered pagination with proper spacing
+	paginationStyle := lipgloss.NewStyle().
+		Width(m.width - 4).
+		Align(lipgloss.Center)
+	
+	// Build pagination line with proper spacing
+	pagination := fmt.Sprintf("%s          %s          %s", leftArrow, pageInfo, rightArrow)
 	
 	return paginationStyle.Render(pagination)
 }
@@ -310,12 +282,8 @@ func getPageRows(allRows []table.Row, page, rowsPerPage int) []table.Row {
 // ShowTable is a convenience function to display a table and wait for user interaction
 func ShowTable(config TableConfig) error {
 	model := New(config)
-	// Enable mouse support and use alt screen
-	p := tea.NewProgram(
-		model, 
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(), // Enable mouse support
-	)
+	// Use alt screen for clean display
+	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running table: %w", err)
 	}

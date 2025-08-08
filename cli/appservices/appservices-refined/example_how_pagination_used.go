@@ -1,4 +1,4 @@
-// Example showing all enhanced table features
+// Test file to verify the table displays correctly
 package main
 
 import (
@@ -10,51 +10,45 @@ import (
 )
 
 func main() {
-	// Example 1: Simple table with pagination
-	showBasicTableWithPagination()
-	
-	// Example 2: Large dataset with mouse support
-	// showLargeDataset()
+	testAppServicesTable()
 }
 
-func showBasicTableWithPagination() {
-	// Define columns with proper widths
+func testAppServicesTable() {
+	// Match the exact structure from your appservices
 	columns := []table.Column{
-		{Title: "Service Name", Width: 30},
+		{Title: "Name", Width: 30},
 		{Title: "Type", Width: 15},
+		{Title: "Capability", Width: 15},
 		{Title: "Status", Width: 12},
 		{Title: "Environment", Width: 12},
-		{Title: "Port", Width: 8},
-		{Title: "Health", Width: 10},
+		{Title: "Created By", Width: 15},
 	}
 	
-	// Create sample data (15 rows to demonstrate pagination)
+	// Sample data matching your ApplicationServices structure
 	rows := []table.Row{
-		{"auth-service-v2", "REST API", "✓ Active", "Production", "8080", "Healthy"},
-		{"user-management", "gRPC", "✓ Active", "Production", "9090", "Healthy"},
-		{"payment-gateway", "REST API", "✓ Active", "Production", "8081", "Healthy"},
-		{"notification-service", "WebSocket", "✓ Active", "Production", "8082", "Healthy"},
-		{"analytics-engine", "Batch", "⚠ Idle", "Production", "8083", "Warning"},
-		{"report-generator", "Batch", "✓ Active", "Production", "8084", "Healthy"},
-		{"cache-service", "Redis", "✓ Active", "Production", "6379", "Healthy"},
-		{"search-indexer", "ElasticSearch", "✓ Active", "Production", "9200", "Healthy"},
-		{"file-storage", "S3", "✓ Active", "Production", "8085", "Healthy"},
-		{"email-sender", "SMTP", "✓ Active", "Production", "587", "Healthy"},
-		{"audit-logger", "Kafka", "✓ Active", "Production", "9092", "Healthy"},
-		{"session-manager", "Redis", "✓ Active", "Production", "6380", "Healthy"},
-		{"rate-limiter", "In-Memory", "✓ Active", "Production", "8086", "Healthy"},
-		{"image-processor", "Worker", "✗ Stopped", "Staging", "8087", "Down"},
-		{"backup-service", "Cron", "⚠ Idle", "Production", "8088", "Warning"},
+		{"cloud-experience-t-asdfasd", "ELASTICACHE", "CACHE", "PROVISIONING", "TEST", "XB39"},
+		{"cloud-experience-t-rash-cache", "ELASTICACHE", "CACHE", "PROVISIONING", "TEST", "FFN7"},
+		{"cloud-experience-t-rash-cache1", "ELASTICACHE", "CACHE", "PROVISIONING", "TEST", "FFN7"},
+		{"cloud-experience-t-test", "CACHE", "ELASTICACHE", "DEPROVISIONED", "TEST", "XB39"},
+		{"cloud-experience-t-userApi123", "CACHE", "ELASTICACHE", "PROVISIONING", "TEST", "FFN7"},
+		{"dillon-f2c2", "SECRET", "API_KEY", "INVOCATION_ERROR", "TEST", "F2C2"},
+		{"r322-api", "SECRET", "API_KEY", "PROVISIONING", "TEST", "FFN7"},
+		{"tannertest1", "COMPUTE", "BODA_APP", "PROVISIONING", "TEST", "XB39"},
+		{"tannertest2", "SECRET", "ACCESS_TOKEN", "DEPROVISIONED", "TEST", "XB39"},
+		{"test", "SECRET", "ACCESS_TOKEN", "DEPROVISIONED", "TEST", "XB39"},
+		{"testapp", "COMPUTE", "BODA_APP", "PROVISIONED", "TEST", "XB39"},
+		{"test-service-alpha", "CACHE", "REDIS", "ACTIVE", "PROD", "ABC1"},
+		{"test-service-beta", "DATABASE", "POSTGRES", "ACTIVE", "PROD", "DEF2"},
+		{"test-service-gamma", "COMPUTE", "LAMBDA", "INACTIVE", "DEV", "GHI3"},
+		{"test-service-delta", "STORAGE", "S3", "ACTIVE", "STAGING", "JKL4"},
 	}
 	
-	// Show table with pagination (10 rows per page)
+	// Display with pagination (10 rows per page, so will show page controls)
 	err := tableui.ShowTable(tableui.TableConfig{
-		Title:          "Microservices Dashboard",
+		Title:          fmt.Sprintf("Total technical services: %d", len(rows)),
 		Columns:        columns,
 		Rows:           rows,
-		Width:          100,
-		Height:         20,
-		RowsPerPage:    10, // Will show "1-10 of 15" with navigation
+		RowsPerPage:    10,
 		ShowPagination: true,
 	})
 	
@@ -63,69 +57,32 @@ func showBasicTableWithPagination() {
 	}
 }
 
-func showLargeDataset() {
-	// Example with more data
-	columns := tableui.CreateColumns(
-		[]string{"ID", "Name", "Department", "Role", "Status"}, 
-		18, // uniform width
-	)
-	
-	// Generate 50 rows of sample data
-	var rows []table.Row
-	departments := []string{"Engineering", "Sales", "Marketing", "Support", "DevOps"}
-	roles := []string{"Senior", "Junior", "Lead", "Manager", "Intern"}
-	statuses := []string{"Active", "On Leave", "Remote", "In Office"}
-	
-	for i := 1; i <= 50; i++ {
-		row := table.Row{
-			fmt.Sprintf("EMP%04d", i),
-			fmt.Sprintf("Employee %d", i),
-			departments[i%5],
-			roles[i%5],
-			statuses[i%4],
-		}
-		rows = append(rows, row)
-	}
-	
-	// Display with pagination
-	err := tableui.ShowTable(tableui.TableConfig{
-		Title:          fmt.Sprintf("Employee Directory (%d total)", len(rows)),
-		Columns:        columns,
-		Rows:           rows,
-		Width:          100,
-		Height:         25,
-		RowsPerPage:    15, // Show 15 at a time
-		ShowPagination: true,
-	})
-	
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// Example: Table without pagination for small datasets
-func showCompactTable() {
+// Alternative test with simpler data
+func testSimpleTable() {
 	columns := []table.Column{
-		{Title: "Metric", Width: 20},
-		{Title: "Value", Width: 15},
-		{Title: "Change", Width: 12},
+		{Title: "ID", Width: 10},
+		{Title: "Service", Width: 25},
+		{Title: "Status", Width: 12},
+		{Title: "Type", Width: 15},
 	}
 	
 	rows := []table.Row{
-		{"CPU Usage", "45%", "↑ +5%"},
-		{"Memory", "2.3 GB", "↓ -100MB"},
-		{"Disk I/O", "120 MB/s", "→ 0%"},
-		{"Network", "50 Mbps", "↑ +10%"},
+		{"001", "authentication-service", "Active", "REST API"},
+		{"002", "user-management", "Active", "gRPC"},
+		{"003", "payment-gateway", "Active", "REST API"},
+		{"004", "notification-service", "Inactive", "WebSocket"},
+		{"005", "analytics-engine", "Active", "Batch"},
+		{"006", "report-generator", "Active", "Batch"},
+		{"007", "cache-service", "Active", "Redis"},
 	}
 	
-	// No pagination for small datasets
+	// Display without pagination for small dataset
 	err := tableui.ShowTable(tableui.TableConfig{
-		Title:       "System Metrics",
-		Columns:     columns,
-		Rows:        rows,
-		Width:       60,
-		Height:      15,
-		RowsPerPage: 0, // 0 means show all rows, no pagination
+		Title:          "Service Overview",
+		Columns:        columns,
+		Rows:           rows,
+		RowsPerPage:    0, // No pagination
+		ShowPagination: false,
 	})
 	
 	if err != nil {

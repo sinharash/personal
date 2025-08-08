@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/spf13/cobra"
 	
-	tableui "example/hey/hey/pkg/table" // Import the table package
+	tableui "/pkg/table" // Import the table package
 )
 
 type Flags struct {
@@ -87,36 +87,36 @@ func displayTableUI(services []merna.ApplicationServices) {
 
 	// Define table columns with appropriate widths
 	columns := []table.Column{
-		{Title: "Name", Width: 35},
-		{Title: "Type", Width: 20},
-		{Title: "Capability", Width: 20},
-		{Title: "Status", Width: 15},
-		{Title: "Environment", Width: 15},
-		{Title: "Created By", Width: 20},
+		{Title: "Name", Width: 30},
+		{Title: "Type", Width: 15},
+		{Title: "Capability", Width: 15},
+		{Title: "Status", Width: 12},
+		{Title: "Environment", Width: 12},
+		{Title: "Created By", Width: 15},
 	}
 
 	// Convert services to table rows
 	rows := make([]table.Row, 0, len(services))
 	for _, svc := range services {
 		row := table.Row{
-			truncateString(svc.Name, 35),
-			svc.Type,
-			svc.Capability,
-			svc.Status,
-			svc.Environment,
-			svc.CreatedBy,
+			truncateString(svc.Name, 30),
+			truncateString(svc.Type, 15),
+			truncateString(svc.Capability, 15),
+			truncateString(svc.Status, 12),
+			truncateString(svc.Environment, 12),
+			truncateString(svc.CreatedBy, 15),
 		}
 		rows = append(rows, row)
 	}
 
 	// Create and show the table with pagination
 	config := tableui.TableConfig{
-		Title:        fmt.Sprintf("Application Services (Total: %d)", len(services)),
-		Columns:      columns,
-		Rows:         rows,
-		Width:        130, // Increased width to accommodate all columns
-		Height:       25,
-		RowsPerPage:  10,  // Show 10 rows per page
+		Title:          fmt.Sprintf("Application Services (Total: %d)", len(services)),
+		Columns:        columns,
+		Rows:           rows,
+		// Width auto-calculates based on column widths
+		Height:         25,
+		RowsPerPage:    10,  // Show 10 rows per page
 		ShowPagination: true,
 	}
 
