@@ -37,7 +37,7 @@ type TableConfig struct {
 
 // New creates a new table model with the given configuration
 func New(config TableConfig) TableModel {
-	// Set width default - make it wide enough
+	// Set width default
 	if config.Width == 0 {
 		config.Width = 120
 	}
@@ -62,25 +62,18 @@ func New(config TableConfig) TableModel {
 	// Get initial page of rows
 	displayRows := getPageRows(config.Rows, 0, config.RowsPerPage)
 
-	// Calculate actual table width (sum of all columns + separators)
-	tableWidth := 0
-	for _, col := range config.Columns {
-		tableWidth += col.Width + 3 // column width + separator + padding
-	}
-
-	// Create the table with proper width
+	// Create the table
 	t := table.New(
 		table.WithColumns(config.Columns),
 		table.WithRows(displayRows),
 		table.WithFocused(true),
 		table.WithHeight(tableHeight),
-		table.WithWidth(tableWidth),
 	)
 
-	// Apply styles for proper table appearance
+	// Apply clean, simple styles
 	s := table.DefaultStyles()
 	
-	// Header style with bottom border
+	// Header style - just bold with underline
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
@@ -91,7 +84,7 @@ func New(config TableConfig) TableModel {
 		Foreground(lipgloss.Color("229")).
 		Bold(true)
 	
-	// Selected row highlighting
+	// Selected row - highlight entire row
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
@@ -154,40 +147,37 @@ func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View implements tea.Model with properly styled table
+// View implements tea.Model with clean table display
 func (m TableModel) View() string {
 	// Build the complete view
 	var s strings.Builder
 	
-	// Title at the top
+	// Title at the top (left-aligned)
 	if m.title != "" {
 		titleStyle := lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("229")).
-			Width(m.width).
-			Align(lipgloss.Center).
 			MarginBottom(1)
 		
 		s.WriteString(titleStyle.Render(m.title))
 		s.WriteString("\n")
 	}
 	
-	// Get table view and add vertical separators
-	tableLines := strings.Split(m.table.View(), "\n")
-	enhancedTable := m.enhanceTableDisplay(tableLines)
-	
-	// Add outer border around the table
+	// Table with simple border
 	borderStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Padding(0, 1)
 	
-	// Combine table and pagination if needed
-	tableContent := enhancedTable
+	// Get table content
+	tableContent := m.table.View()
+	
+	// Add pagination if enabled
 	if m.showPagination {
 		tableContent += "\n\n" + m.renderPagination()
 	}
 	
+	// Apply border to entire table
 	s.WriteString(borderStyle.Render(tableContent))
 	
 	// Help text at the bottom
@@ -199,78 +189,12 @@ func (m TableModel) View() string {
 	
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
-		Width(m.width).
-		Align(lipgloss.Center).
 		MarginTop(1)
 	
 	s.WriteString("\n")
 	s.WriteString(helpStyle.Render(helpText))
 	
 	return s.String()
-}
-
-// enhanceTableDisplay adds vertical column separators for better visual
-func (m TableModel) enhanceTableDisplay(lines []string) string {
-	if len(lines) == 0 {
-		return ""
-	}
-	
-	// Process each line to add vertical separators
-	var enhanced []string
-	for i, line := range lines {
-		if line == "" {
-			enhanced = append(enhanced, line)
-			continue
-		}
-		
-		// For header row (first line with content)
-		if i == 0 {
-			// Add vertical bars between columns based on column widths
-			enhancedLine := m.addSeparatorsToLine(line, true)
-			enhanced = append(enhanced, enhancedLine)
-		} else {
-			// For data rows
-			enhancedLine := m.addSeparatorsToLine(line, false)
-			enhanced = append(enhanced, enhancedLine)
-		}
-	}
-	
-	return strings.Join(enhanced, "\n")
-}
-
-// addSeparatorsToLine adds vertical separators to a single line
-func (m TableModel) addSeparatorsToLine(line string, isHeader bool) string {
-	// Calculate positions where separators should be added
-	cols := m.table.Columns()
-	if len(cols) <= 1 {
-		return line
-	}
-	
-	// Build new line with separators
-	runes := []rune(line)
-	result := []rune{}
-	pos := 0
-	
-	for i, col := range cols {
-		// Add column content
-		endPos := pos + col.Width
-		if endPos > len(runes) {
-			endPos = len(runes)
-		}
-		
-		if pos < len(runes) {
-			result = append(result, runes[pos:endPos]...)
-		}
-		
-		// Add separator after column (except for last column)
-		if i < len(cols)-1 {
-			result = append(result, ' ', '│', ' ')
-		}
-		
-		pos = endPos + 3 // Move past the column and any existing padding
-	}
-	
-	return string(result)
 }
 
 // renderPagination creates the pagination controls
@@ -304,36 +228,14 @@ func (m TableModel) renderPagination() string {
 	
 	pageInfo := fmt.Sprintf("%d-%d of %d", startRow, endRow, m.totalRows)
 	
-	// Create pagination line with proper spacing
-	totalWidth := m.width - 6 // Account for border padding
-	if totalWidth < 50 {
-		totalWidth = 50
-	}
+	// Create centered pagination
+	paginationStyle := lipgloss.NewStyle().
+		Width(100).
+		Align(lipgloss.Center)
 	
-	// Calculate spacing
-	leftPart := leftArrow
-	centerPart := pageInfo
-	rightPart := rightArrow
+	pagination := fmt.Sprintf("%s     %s     %s", leftArrow, pageInfo, rightArrow)
 	
-	// Calculate spaces needed
-	contentLen := len(leftPart) + len(centerPart) + len(rightPart)
-	spacesNeeded := totalWidth - contentLen
-	if spacesNeeded < 4 {
-		spacesNeeded = 4
-	}
-	
-	leftSpaces := spacesNeeded / 2
-	rightSpaces := spacesNeeded - leftSpaces
-	
-	pagination := fmt.Sprintf("%s%s%s%s%s",
-		leftPart,
-		strings.Repeat(" ", leftSpaces),
-		centerPart,
-		strings.Repeat(" ", rightSpaces),
-		rightPart,
-	)
-	
-	return pagination
+	return paginationStyle.Render(pagination)
 }
 
 // Helper methods for pagination
@@ -372,6 +274,14 @@ func ShowTable(config TableConfig) error {
 		return fmt.Errorf("error running table: %w", err)
 	}
 	return nil
+}
+
+// ShowTableWithColumnSeparators shows a table with visual column separators
+// Uses lipgloss table for better column separation
+func ShowTableWithColumnSeparators(config TableConfig) error {
+	// This is an alternative method using lipgloss.Table if column separators are needed
+	// For now, we'll use the standard table without forced separators
+	return ShowTable(config)
 }
 
 // Helper function to convert any data to table rows
