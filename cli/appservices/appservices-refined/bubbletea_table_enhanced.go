@@ -29,7 +29,7 @@ type TableConfig struct {
 	Title          string
 	Columns        []table.Column
 	Rows           []table.Row
-	Width          int  // Optional: defaults to auto-calculate based on columns
+	Width          int  // Optional: defaults to 120
 	Height         int  // Optional: defaults to 20
 	RowsPerPage    int  // Optional: defaults to 10 (0 means no pagination)
 	ShowPagination bool // Optional: defaults to true if RowsPerPage > 0
@@ -37,14 +37,9 @@ type TableConfig struct {
 
 // New creates a new table model with the given configuration
 func New(config TableConfig) TableModel {
-	// Calculate total width needed if not provided
+	// Set width default - make it wide enough
 	if config.Width == 0 {
-		totalWidth := 0
-		for _, col := range config.Columns {
-			totalWidth += col.Width
-		}
-		// Add some padding for borders and margins
-		config.Width = totalWidth + len(config.Columns) + 10
+		config.Width = 120
 	}
 	
 	// Set height default
@@ -58,27 +53,34 @@ func New(config TableConfig) TableModel {
 		config.RowsPerPage = len(config.Rows) // Show all rows if no pagination
 	}
 	
-	// Calculate table height (leave room for title, borders, and pagination)
-	tableHeight := config.Height - 4
+	// Calculate table height (leave room for title, borders, help text, and pagination)
+	tableHeight := config.Height - 6
 	if showPagination {
-		tableHeight -= 3
+		tableHeight -= 2
 	}
 	
 	// Get initial page of rows
 	displayRows := getPageRows(config.Rows, 0, config.RowsPerPage)
 
-	// Create the table with clean styles
+	// Calculate actual table width (sum of all columns + separators)
+	tableWidth := 0
+	for _, col := range config.Columns {
+		tableWidth += col.Width + 3 // column width + separator + padding
+	}
+
+	// Create the table with proper width
 	t := table.New(
 		table.WithColumns(config.Columns),
 		table.WithRows(displayRows),
 		table.WithFocused(true),
 		table.WithHeight(tableHeight),
+		table.WithWidth(tableWidth),
 	)
 
-	// Apply clean table styles - no individual cell borders
+	// Apply styles for proper table appearance
 	s := table.DefaultStyles()
 	
-	// Header style - bold with bottom border only
+	// Header style with bottom border
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
@@ -89,7 +91,7 @@ func New(config TableConfig) TableModel {
 		Foreground(lipgloss.Color("229")).
 		Bold(true)
 	
-	// Selected row style - highlight entire row
+	// Selected row highlighting
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
@@ -141,9 +143,9 @@ func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		tableHeight := msg.Height - 4
+		tableHeight := msg.Height - 6
 		if m.showPagination {
-			tableHeight -= 3
+			tableHeight -= 2
 		}
 		m.table.SetHeight(tableHeight)
 	}
@@ -152,62 +154,123 @@ func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View implements tea.Model with clean bordered table
+// View implements tea.Model with properly styled table
 func (m TableModel) View() string {
-	// Define styles
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("229")).
-		Width(m.width).
-		Align(lipgloss.Center).
-		MarginBottom(1)
-
-	// Simple border style for the entire table
-	tableBorderStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Width(m.width)
-
-	// Help text style
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Width(m.width).
-		Align(lipgloss.Center).
-		MarginTop(1)
-
-	// Build the view
-	var content strings.Builder
+	// Build the complete view
+	var s strings.Builder
 	
-	// Title
+	// Title at the top
 	if m.title != "" {
-		content.WriteString(titleStyle.Render(m.title))
-		content.WriteString("\n")
+		titleStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("229")).
+			Width(m.width).
+			Align(lipgloss.Center).
+			MarginBottom(1)
+		
+		s.WriteString(titleStyle.Render(m.title))
+		s.WriteString("\n")
 	}
 	
-	// Table content
-	tableView := m.table.View()
+	// Get table view and add vertical separators
+	tableLines := strings.Split(m.table.View(), "\n")
+	enhancedTable := m.enhanceTableDisplay(tableLines)
 	
-	// Add pagination if enabled
+	// Add outer border around the table
+	borderStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(0, 1)
+	
+	// Combine table and pagination if needed
+	tableContent := enhancedTable
 	if m.showPagination {
-		paginationView := m.renderPagination()
-		// Combine table and pagination in the bordered box
-		tableWithPagination := tableView + "\n\n" + paginationView
-		content.WriteString(tableBorderStyle.Render(tableWithPagination))
-	} else {
-		// Just the table in the bordered box
-		content.WriteString(tableBorderStyle.Render(tableView))
+		tableContent += "\n\n" + m.renderPagination()
 	}
 	
-	// Help text
+	s.WriteString(borderStyle.Render(tableContent))
+	
+	// Help text at the bottom
 	helpText := "↑/↓: navigate rows • "
 	if m.showPagination {
 		helpText += "←/→: change page • "
 	}
 	helpText += "q: quit"
-	content.WriteString("\n")
-	content.WriteString(helpStyle.Render(helpText))
 	
-	return content.String()
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		Width(m.width).
+		Align(lipgloss.Center).
+		MarginTop(1)
+	
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render(helpText))
+	
+	return s.String()
+}
+
+// enhanceTableDisplay adds vertical column separators for better visual
+func (m TableModel) enhanceTableDisplay(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	
+	// Process each line to add vertical separators
+	var enhanced []string
+	for i, line := range lines {
+		if line == "" {
+			enhanced = append(enhanced, line)
+			continue
+		}
+		
+		// For header row (first line with content)
+		if i == 0 {
+			// Add vertical bars between columns based on column widths
+			enhancedLine := m.addSeparatorsToLine(line, true)
+			enhanced = append(enhanced, enhancedLine)
+		} else {
+			// For data rows
+			enhancedLine := m.addSeparatorsToLine(line, false)
+			enhanced = append(enhanced, enhancedLine)
+		}
+	}
+	
+	return strings.Join(enhanced, "\n")
+}
+
+// addSeparatorsToLine adds vertical separators to a single line
+func (m TableModel) addSeparatorsToLine(line string, isHeader bool) string {
+	// Calculate positions where separators should be added
+	cols := m.table.Columns()
+	if len(cols) <= 1 {
+		return line
+	}
+	
+	// Build new line with separators
+	runes := []rune(line)
+	result := []rune{}
+	pos := 0
+	
+	for i, col := range cols {
+		// Add column content
+		endPos := pos + col.Width
+		if endPos > len(runes) {
+			endPos = len(runes)
+		}
+		
+		if pos < len(runes) {
+			result = append(result, runes[pos:endPos]...)
+		}
+		
+		// Add separator after column (except for last column)
+		if i < len(cols)-1 {
+			result = append(result, ' ', '│', ' ')
+		}
+		
+		pos = endPos + 3 // Move past the column and any existing padding
+	}
+	
+	return string(result)
 }
 
 // renderPagination creates the pagination controls
@@ -224,8 +287,8 @@ func (m TableModel) renderPagination() string {
 	disabledButtonStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("238"))
 	
-	// Create pagination display
-	var leftArrow, rightArrow, pageInfo string
+	// Create pagination elements
+	var leftArrow, rightArrow string
 	
 	if m.currentPage > 0 {
 		leftArrow = activeButtonStyle.Render("◄ Previous")
@@ -239,17 +302,38 @@ func (m TableModel) renderPagination() string {
 		rightArrow = disabledButtonStyle.Render("Next ►")
 	}
 	
-	pageInfo = fmt.Sprintf("%d-%d of %d", startRow, endRow, m.totalRows)
+	pageInfo := fmt.Sprintf("%d-%d of %d", startRow, endRow, m.totalRows)
 	
-	// Create centered pagination with proper spacing
-	paginationStyle := lipgloss.NewStyle().
-		Width(m.width - 4).
-		Align(lipgloss.Center)
+	// Create pagination line with proper spacing
+	totalWidth := m.width - 6 // Account for border padding
+	if totalWidth < 50 {
+		totalWidth = 50
+	}
 	
-	// Build pagination line with proper spacing
-	pagination := fmt.Sprintf("%s          %s          %s", leftArrow, pageInfo, rightArrow)
+	// Calculate spacing
+	leftPart := leftArrow
+	centerPart := pageInfo
+	rightPart := rightArrow
 	
-	return paginationStyle.Render(pagination)
+	// Calculate spaces needed
+	contentLen := len(leftPart) + len(centerPart) + len(rightPart)
+	spacesNeeded := totalWidth - contentLen
+	if spacesNeeded < 4 {
+		spacesNeeded = 4
+	}
+	
+	leftSpaces := spacesNeeded / 2
+	rightSpaces := spacesNeeded - leftSpaces
+	
+	pagination := fmt.Sprintf("%s%s%s%s%s",
+		leftPart,
+		strings.Repeat(" ", leftSpaces),
+		centerPart,
+		strings.Repeat(" ", rightSpaces),
+		rightPart,
+	)
+	
+	return pagination
 }
 
 // Helper methods for pagination
