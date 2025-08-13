@@ -1,36 +1,9 @@
-// Add this helper function at the top of your file
-// Extracts field paths from displayFormat template
-const extractFieldsFromDisplayFormat = (displayFormat?: string): string[] => {
-  if (!displayFormat) return [];
+// At the top of your EnhancedEntityPicker file, add this import:
+import { ENHANCED_ENTITY_PICKER_ADDITIONAL_FIELDS } from "./enhanced-entity-picker-fields";
 
-  const fields = new Set<string>();
-
-  // Extract fields from {{ field.path }} syntax
-  const templateMatches = displayFormat.match(/\{\{\s*([^}]+)\s*\}\}/g);
-  if (templateMatches) {
-    templateMatches.forEach((match) => {
-      const field = match.replace(/\{\{\s*|\s*\}\}/g, "").trim();
-      fields.add(field);
-    });
-  }
-
-  // Extract fields from fallback syntax: field1 || field2 || field3
-  if (displayFormat.includes(" || ")) {
-    const fallbackFields = displayFormat.split(" || ").map((f) => f.trim());
-    fallbackFields.forEach((field) => {
-      // Skip if it contains template syntax (already handled above)
-      if (!field.includes("{{")) {
-        fields.add(field);
-      }
-    });
-  }
-
-  return Array.from(fields);
-};
-
-// Replace your existing fields array and catalogApi call (lines 111-122) with:
+// Replace your lines 111-122 with this simple change:
 const { value: entities, loading } = useAsync(async () => {
-  // Base fields array - keep for performance (same as original EntityPicker intent)
+  // Your base fields (keep exactly as they were)
   const baseFields = [
     "kind",
     "metadata.account_id",
@@ -43,13 +16,13 @@ const { value: entities, loading } = useAsync(async () => {
     "spec.type",
   ];
 
-  // Dynamically add fields needed for displayFormat
-  const displayFormatFields = extractFieldsFromDisplayFormat(displayFormat);
+  // Combine with additional fields for comprehensive displayFormat support
+  const allFields = [
+    ...baseFields,
+    ...ENHANCED_ENTITY_PICKER_ADDITIONAL_FIELDS,
+  ];
 
-  // Combine base fields with displayFormat fields (remove duplicates)
-  const allFields = [...new Set([...baseFields, ...displayFormatFields])];
-
-  // Use combined fields for API call
+  // Use combined fields - no more dynamic changes, no re-renders
   const { items } = await catalogApi.getEntities(
     catalogFilter
       ? { filter: catalogFilter, fields: allFields }
@@ -77,9 +50,9 @@ const { value: entities, loading } = useAsync(async () => {
   });
 
   return { catalogEntities: items, entityRefToPresentation };
-}, [catalogFilter, displayFormat]); // Add displayFormat to dependencies
+}, [catalogFilter]); // Remove displayFormat from dependency array to stop re-renders
 
-// Add helper functions for displayFormat processing:
+// Add the helper functions for displayFormat (these don't cause re-renders):
 const getNestedValue = (obj: any, path: string): any => {
   if (!obj || !path) return undefined;
   try {
@@ -95,7 +68,6 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
   }
 
   try {
-    // Handle fallback syntax: "property1 || property2"
     if (template.includes(" || ")) {
       const paths = template.split(" || ").map((p) => p.trim());
       for (const path of paths) {
@@ -105,7 +77,6 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
       return "";
     }
 
-    // Handle template syntax: "{{ property }}"
     return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expression) => {
       const value = getNestedValue(entity, expression.trim());
       return value ? String(value) : "";
@@ -114,23 +85,3 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
     return entity?.metadata?.name || "";
   }
 };
-
-// OPTIONAL: Move base fields to external file if you prefer
-// Create: enhanced-entity-picker-fields.ts
-/*
-export const ENHANCED_ENTITY_PICKER_BASE_FIELDS = [
-  'kind',
-  'metadata.account_id',
-  'metadata.name',
-  'metadata.namespace', 
-  'metadata.title',
-  'metadata.description',
-  'spec.profile.displayName',
-  'spec.profile.email',
-  'spec.type',
-];
-*/
-
-// Then import and use:
-// import { ENHANCED_ENTITY_PICKER_BASE_FIELDS } from './enhanced-entity-picker-fields';
-// const baseFields = ENHANCED_ENTITY_PICKER_BASE_FIELDS;
