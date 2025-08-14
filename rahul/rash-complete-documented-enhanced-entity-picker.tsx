@@ -616,3 +616,75 @@ function buildCatalogFilter(
 
   return convertSchemaFiltersToQuery(catalogFilter);
 }
+
+
+>>>>>>>
+this code is imporoved function for fall back inside the <template>
+// Enhanced formatDisplayValue to support fallback within {{ }} brackets
+const formatDisplayValue = (template: string, entity: Entity): string => {
+  if (!template || !entity) {
+    return entity?.metadata?.title || entity?.metadata?.name || '';
+  }
+
+  try {
+    // Handle pure fallback syntax (no {{ }} brackets): "prop1 || prop2"
+    if (template.includes(' || ') && !template.includes('{{')) {
+      const paths = template.split(' || ').map(p => p.trim());
+      for (const path of paths) {
+        const value = getNestedValue(entity, path);
+        const stringValue = convertToString(value);
+        if (stringValue && stringValue.trim()) return stringValue;
+      }
+      return '';
+    }
+
+    // Handle template syntax with fallback support within {{ }}
+    return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expression) => {
+      const trimmedExpression = expression.trim();
+      
+      // Check if expression contains fallback syntax
+      if (trimmedExpression.includes(' || ')) {
+        // Handle fallback within the {{ }} brackets
+        const paths = trimmedExpression.split(' || ').map(p => p.trim());
+        for (const path of paths) {
+          const value = getNestedValue(entity, path);
+          const stringValue = convertToString(value);
+          if (stringValue && stringValue.trim()) return stringValue;
+        }
+        return ''; // No fallback value found
+      } else {
+        // Handle single property access
+        const value = getNestedValue(entity, trimmedExpression);
+        return convertToString(value);
+      }
+    });
+  } catch {
+    return entity?.metadata?.name || '';
+  }
+};
+
+// Usage Examples with Enhanced Support:
+
+/*
+YAML Examples that will work with enhanced version:
+
+# 1. Template without fallback (already works)
+displayFormat: "Email: {{ metadata.title }} - Name: {{ metadata.name }}"
+# Result: "Email: My Service - Name: my-service"
+
+# 2. Pure fallback (already works)  
+displayFormat: "metadata.title || metadata.name || spec.type"
+# Result: First non-empty value
+
+# 3. Template with fallback within brackets (NEW - will work with enhanced code)
+displayFormat: "Type: {{ spec.type || metadata.title }}"
+# Result: "Type: service" (uses spec.type if available, otherwise metadata.title)
+
+# 4. Multiple templates with fallbacks (NEW)
+displayFormat: "{{ spec.profile.displayName || metadata.name }} - {{ spec.profile.email || metadata.account_email }}"
+# Result: "John Doe - john.doe@company.com"
+
+# 5. Mixed static text with fallback templates (NEW)
+displayFormat: "User: {{ spec.profile.displayName || metadata.title }} ({{ spec.profile.department || 'Unknown Dept' }})"
+# Result: "User: John Doe (Engineering)"
+*/</template>
