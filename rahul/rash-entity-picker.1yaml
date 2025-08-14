@@ -1,0 +1,196 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: entitypicker-test-template
+  title: EntityPicker Test Template
+  description: Template to test standard EntityPicker functionality
+spec:
+  owner: platform-team
+  type: service
+  
+  parameters:
+    - title: "🔍 Entity Picker Test Cases"
+      description: "Test various EntityPicker configurations"
+      properties:
+        
+        # Test Case 1: Basic User Selection
+        userOwner:
+          title: "1. Select Service Owner (User)"
+          type: string
+          description: "Standard user selection with basic filtering"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: User
+            allowArbitraryValues: false
+        
+        # Test Case 2: Component Selection with Multiple Kinds
+        relatedComponent:
+          title: "2. Select Related Component"
+          type: string
+          description: "Component selection with multiple allowed kinds"
+          ui:field: EntityPicker
+          ui:options:
+            allowedKinds:
+              - Component
+              - Resource
+            defaultKind: Component
+            defaultNamespace: default
+            allowArbitraryValues: true
+        
+        # Test Case 3: System Selection with Custom Filter
+        targetSystem:
+          title: "3. Select Target System"
+          type: string
+          description: "System selection with complex filtering"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: System
+              spec.type: platform
+            allowArbitraryValues: false
+            
+        # Test Case 4: Group Selection (Required Field)
+        teamGroup:
+          title: "4. Select Team Group (Required)"
+          type: string
+          description: "Required group selection"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+              spec.type: team
+            allowArbitraryValues: false
+          required:
+            - teamGroup
+            
+        # Test Case 5: API Selection with Namespace Filter
+        apiDependency:
+          title: "5. Select API Dependency"
+          type: string
+          description: "API selection with namespace filtering"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: API
+              metadata.namespace: production
+            defaultNamespace: production
+            allowArbitraryValues: true
+            
+        # Test Case 6: Free-form Entity Selection
+        anyEntity:
+          title: "6. Select Any Entity (Free Form)"
+          type: string
+          description: "Open entity selection allowing any kind"
+          ui:field: EntityPicker
+          ui:options:
+            allowArbitraryValues: true
+            defaultKind: Component
+            defaultNamespace: default
+            
+        # Test Case 7: Domain Selection (Single Select)
+        businessDomain:
+          title: "7. Select Business Domain"
+          type: string
+          description: "Domain selection for business context"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Domain
+            allowArbitraryValues: false
+            
+        # Test Case 8: Multiple Components with Type Filter
+        serviceComponents:
+          title: "8. Select Service Components"
+          type: string
+          description: "Component selection filtered by service type"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Component
+              spec.type: service
+              spec.lifecycle: production
+            allowArbitraryValues: false
+            
+        # Test Case 9: Location Selection
+        sourceLocation:
+          title: "9. Select Source Location"
+          type: string
+          description: "Location entity selection"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Location
+            allowArbitraryValues: true
+            
+        # Test Case 10: Resource with Owner Filter
+        infraResource:
+          title: "10. Select Infrastructure Resource"
+          type: string
+          description: "Resource selection with owner constraints"
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Resource
+              spec.type: database
+            defaultKind: Resource
+            allowArbitraryValues: false
+
+  steps:
+    - id: debug
+      name: Debug Output
+      action: debug:log
+      input:
+        message: |
+          Field Values Test Results:
+          
+          🔹 User Owner: ${{ parameters.userOwner }}
+          🔹 Related Component: ${{ parameters.relatedComponent }}
+          🔹 Target System: ${{ parameters.targetSystem }}
+          🔹 Team Group: ${{ parameters.teamGroup }}
+          🔹 API Dependency: ${{ parameters.apiDependency }}
+          🔹 Any Entity: ${{ parameters.anyEntity }}
+          🔹 Business Domain: ${{ parameters.businessDomain }}
+          🔹 Service Components: ${{ parameters.serviceComponents }}
+          🔹 Source Location: ${{ parameters.sourceLocation }}
+          🔹 Infrastructure Resource: ${{ parameters.infraResource }}
+
+    - id: fetch-template
+      name: Fetch Template
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          userOwner: ${{ parameters.userOwner }}
+          relatedComponent: ${{ parameters.relatedComponent }}
+          targetSystem: ${{ parameters.targetSystem }}
+          teamGroup: ${{ parameters.teamGroup }}
+          apiDependency: ${{ parameters.apiDependency }}
+          anyEntity: ${{ parameters.anyEntity }}
+          businessDomain: ${{ parameters.businessDomain }}
+          serviceComponents: ${{ parameters.serviceComponents }}
+          sourceLocation: ${{ parameters.sourceLocation }}
+          infraResource: ${{ parameters.infraResource }}
+
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        allowedHosts: ['github.com']
+        description: EntityPicker test results
+        repoUrl: github.com?repo=entitypicker-test&owner=test-org
+        
+    - id: register
+      name: Register in Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
