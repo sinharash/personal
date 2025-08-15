@@ -45,15 +45,37 @@ import { scaffolderTranslationRef } from "../../../translation";
 import { ScaffolderField } from "@backstage/plugin-scaffolder-react/alpha";
 
 export { EnhancedEntityPickerSchema } from "./enhanced-schema";
+import { ENHANCED_ENTITY_PICKER_ADDITIONAL_FIELDS } from "./enhanced-entity-picker-fields";
 
+const convertToString = (value: any): string => {
+  if (value === null || value === undefined) return "";
+
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+};
 // Utility functions for display formatting
+// Enhanced getNestedValue to handle arrays and objects
 const getNestedValue = (obj: any, path: string): any => {
   if (!obj || !path) return undefined;
+
   try {
     return path.split(".").reduce((current, key) => {
-      return current && typeof current === "object" ? current[key] : undefined;
+      if (current === null || current === undefined) return undefined;
+
+      if (!isNaN(Number(key)) && Array.isArray(current)) {
+        return current[Number(key)];
+      }
+
+      return current[key];
     }, obj);
-  } catch {
+  } catch (err) {
     return undefined;
   }
 };
@@ -70,15 +92,17 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
       const paths = template.split(" || ").map((p) => p.trim());
       for (const path of paths) {
         const value = getNestedValue(entity, path);
-        if (value && String(value).trim()) return String(value);
+        const stringValue = convertToString(value);
+        if (stringValue && stringValue.trim()) return stringValue;
+        // if (value && String(value).trim()) return String(value);
       }
-      return entity?.metadata?.name || "";
+      return "";
     }
 
     // Handle template syntax: "{{ property }}"
     return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expression) => {
       const value = getNestedValue(entity, expression.trim());
-      return value ? String(value) : "";
+      return convertToString(value);
     });
   } catch {
     return entity?.metadata?.name || "";
@@ -121,7 +145,7 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
   const entityPresentationApi = useApi(entityPresentationApiRef);
 
   const { value: entities, loading } = useAsync(async () => {
-    const fields = [
+    const baseFields = [
       "kind",
       "metadata.name",
       "metadata.namespace",
@@ -131,10 +155,16 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
       "spec.profile.email",
       "spec.type",
     ];
+
+    const allFields = [
+      ...baseFields,
+      ...ENHANCED_ENTITY_PICKER_ADDITIONAL_FIELDS,
+    ];
+
     const { items } = await catalogApi.getEntities(
       catalogFilter
-        ? { filter: catalogFilter, fields }
-        : { filter: undefined, fields }
+        ? { filter: catalogFilter, fields: allFields }
+        : { filter: undefined, fields: allFields }
     );
 
     const entityRefToPresentation = new Map<
@@ -193,19 +223,15 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
 
           // Store entity reference in hidden field if specified
           if (hiddenEntityRef && formContext?.formData) {
-            try {
-              const entityRef = stringifyEntityRef(ref);
-              formContext.formData[hiddenEntityRef] = entityRef;
-            } catch (error) {
-              console.warn("Failed to store entity reference:", error);
-            }
+            const entityRef = stringifyEntityRef(ref);
+            formContext.formData[hiddenEntityRef] = entityRef;
           }
         } else {
           // Original logic: Store entity reference
           onChange(stringifyEntityRef(ref));
         }
       } else {
-        if (reason === "blur" || reason === "create-option") {
+        if (reason === "blur" || reason === "createOption") {
           // Add in default namespace, etc.
           let entityRef = ref;
           try {
@@ -246,13 +272,13 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
 
     // Try to find by entity reference first (original logic)
     const entityByRef = entities.catalogEntities.find(
-      (e) => stringifyEntityRef(e) === formData
+      (e: Entity) => stringifyEntityRef(e) === formData
     );
     if (entityByRef) return entityByRef;
 
     // If displayFormat is used, try to find by display value
     if (displayFormat) {
-      const entityByDisplay = entities.catalogEntities.find((e) => {
+      const entityByDisplay = entities.catalogEntities.find((e: Entity) => {
         const displayValue = formatDisplayValue(displayFormat, e);
         return displayValue === formData;
       });
@@ -314,15 +340,26 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
         loading={loading}
         onChange={onSelect}
         options={entities?.catalogEntities || []}
-        getOptionLabel={(option) =>
-          // option can be a string due to freeSolo.
-          typeof option === "string"
-            ? option
-            : displayFormat
-            ? formatDisplayValue(displayFormat, option)
-            : entities?.entityRefToPresentation.get(stringifyEntityRef(option))
-                ?.entityRef!
-        }
+        getOptionLabel={(option) => {
+          if (typeof option === "string") {
+            return option;
+          } else if (displayFormat) {
+            return formatDisplayValue(displayFormat, option);
+          }
+          return (
+            entities?.entityRefToPresentation.get(stringifyEntityRef(option))
+              ?.entityRef || stringifyEntityRef(option)
+          );
+        }}
+        // getOptionLabel={(option) =>
+        //   // option can be a string due to freeSolo.
+        //   typeof option === "string"
+        //     ? option
+        //     : displayFormat
+        //     ? formatDisplayValue(displayFormat, option)
+        //     : entities?.entityRefToPresentation.get(stringifyEntityRef(option))
+        //         ?.entityRef!
+        // }
         autoSelect
         freeSolo={allowArbitraryValues}
         renderInput={(params) => (
@@ -336,13 +373,15 @@ export const EnhancedEntityPicker = (props: EnhancedEntityPickerProps) => {
             InputProps={params.InputProps}
           />
         )}
-        renderOption={(option) =>
-          displayFormat ? (
-            <span>{formatDisplayValue(displayFormat, option)}</span>
-          ) : (
-            <EntityDisplayName entityRef={option} />
-          )
-        }
+        renderOption={(renderProps, option) => (
+          <li {...renderProps}>
+            {displayFormat ? (
+              <span>{formatDisplayValue(displayFormat, option)}</span>
+            ) : (
+              <EntityDisplayName entityRef={option} />
+            )}
+          </li>
+        )}
         filterOptions={createFilterOptions<Entity>({
           stringify: (option) =>
             displayFormat
