@@ -81,28 +81,82 @@ const getNestedValue = (obj: any, path: string): any => {
 };
 
 // convert template strings with {{ }} placeholders into display text
+// const formatDisplayValue = (template: string, entity: Entity): string => {
+//   if (!template || !entity) {
+//     return entity?.metadata?.title || entity?.metadata?.name || "";
+//   }
+
+//   try {
+//     // Handle fallback syntax: "property1 || property2"
+//     if (template.includes(" || ")) {
+//       const paths = template.split(" || ").map((p) => p.trim());
+//       for (const path of paths) {
+//         const value = getNestedValue(entity, path);
+//         const stringValue = convertToString(value);
+//         if (stringValue && stringValue.trim()) return stringValue;
+//         // if (value && String(value).trim()) return String(value);
+//       }
+//       return "";
+//     }
+
+//     // Handle template syntax: "{{ property }}"
+//     return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expression) => {
+//       const value = getNestedValue(entity, expression.trim());
+//       return convertToString(value);
+//     });
+//   } catch {
+//     return entity?.metadata?.name || "";
+//   }
+// };
+/**
+ * 
+ * @param template With this change, you get a much more intuitive and flexible syntax:
+Examples:
+
+Simple: "{{ metadata.name }}"
+With text: "Name: {{ metadata.name }}"
+With fallback: "{{ metadata.title || metadata.name }}"
+Complex: "{{ metadata.name || metadata.title }} ({{ spec.profile.email || spec.email || 'no email' }})"
+Mixed: "User: {{ spec.profile.displayName || metadata.name }} - Type: {{ spec.type }}"
+
+This way:
+
+Everything uses the same {{ }} syntax
+Fallback is intuitive - just use || inside the braces
+You can mix fallback and non-fallback in the same template
+It's more flexible - each placeholder can have its own fallback logic
+
+What do you think? This would make the template syntax much more consistent and powerful.RetryClaude can make mistakes. Please double-check responses.Research Opus 4.1
+ * @param entity 
+ * @returns 
+ */
 const formatDisplayValue = (template: string, entity: Entity): string => {
   if (!template || !entity) {
     return entity?.metadata?.title || entity?.metadata?.name || "";
   }
 
   try {
-    // Handle fallback syntax: "property1 || property2"
-    if (template.includes(" || ")) {
-      const paths = template.split(" || ").map((p) => p.trim());
-      for (const path of paths) {
-        const value = getNestedValue(entity, path);
-        const stringValue = convertToString(value);
-        if (stringValue && stringValue.trim()) return stringValue;
-        // if (value && String(value).trim()) return String(value);
-      }
-      return "";
-    }
-
-    // Handle template syntax: "{{ property }}"
+    // Handle template syntax: "{{ property }}" with support for fallback inside
     return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expression) => {
-      const value = getNestedValue(entity, expression.trim());
-      return convertToString(value);
+      const expr = expression.trim();
+
+      // Check if this expression contains fallback syntax (||)
+      if (expr.includes("||")) {
+        // Handle fallback: try each option until we find a non-empty value
+        const paths = expr.split("||").map((p) => p.trim());
+        for (const path of paths) {
+          const value = getNestedValue(entity, path);
+          const stringValue = convertToString(value);
+          if (stringValue && stringValue.trim()) {
+            return stringValue;
+          }
+        }
+        return ""; // Return empty if no fallback has a value
+      } else {
+        // Simple property access
+        const value = getNestedValue(entity, expr);
+        return convertToString(value);
+      }
     });
   } catch {
     return entity?.metadata?.name || "";
