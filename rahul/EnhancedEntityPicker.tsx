@@ -585,3 +585,34 @@ const { value: entities, loading } = useAsync(async () => {
 
   // ... rest of the code
 }, [catalogFilter, displayFormat]); // Add displayFormat as dependency
+
+another change linter complained: 
+const extractFieldsFromTemplate = (template: string): string[] => {
+  if (!template) return [];
+  
+  const fields = new Set<string>();
+  const regex = /\{\{\s*([^}]+)\s*\}\}/g;
+  let match = regex.exec(template);  // Move initial assignment outside
+  
+  while (match !== null) {  // Now just checking, not assigning
+    const expression = match[1];
+    // Handle fallback syntax: "metadata.title || metadata.name"
+    if (expression.includes('||')) {
+      const paths = expression.split('||').map((p: string) => p.trim());
+      paths.forEach(path => {
+        // Only add if it is a field path (not a literal string)
+        if (!path.startsWith("'") && !path.startsWith('"')) {
+          fields.add(path);
+        }
+      });
+    } else {
+      const path = expression.trim();
+      if (!path.startsWith("'") && !path.startsWith('"')) {
+        fields.add(path);
+      }
+    }
+    match = regex.exec(template);  // Move assignment to end of loop
+  }
+  
+  return Array.from(fields);
+};
