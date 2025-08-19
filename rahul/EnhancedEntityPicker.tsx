@@ -143,7 +143,7 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
       // Check if this expression contains fallback syntax (||)
       if (expr.includes("||")) {
         // Handle fallback: try each option until we find a non-empty value
-        const paths = expr.split("||").map((p) => p.trim());
+        const paths = expr.split("||").map((p: string) => p.trim());
         for (const path of paths) {
           const value = getNestedValue(entity, path);
           const stringValue = convertToString(value);
@@ -153,7 +153,6 @@ const formatDisplayValue = (template: string, entity: Entity): string => {
         }
         return ""; // Return empty if no fallback has a value
       } else {
-        // Simple property access
         const value = getNestedValue(entity, expr);
         return convertToString(value);
       }
@@ -519,3 +518,70 @@ function buildCatalogFilter(
 
   return convertSchemaFiltersToQuery(catalogFilter);
 }
+
+
+>>>>>>>>>>
+
+suggested change:
+
+/**
+ * Extract field paths from a displayFormat template
+ * Example: "{{ metadata.name }} - {{ spec.owner }}" -> ['metadata.name', 'spec.owner']
+ */
+const extractFieldsFromTemplate = (template: string): string[] => {
+  if (!template) return [];
+  
+  const fields = new Set<string>();
+  const regex = /\{\{\s*([^}]+)\s*\}\}/g;
+  let match;
+  
+  while ((match = regex.exec(template)) !== null) {
+    const expression = match[1];
+    // Handle fallback syntax: "metadata.title || metadata.name"
+    if (expression.includes('||')) {
+      const paths = expression.split('||').map(p => p.trim());
+      paths.forEach(path => {
+        // Only add if it looks like a field path (not a literal string)
+        if (!path.startsWith("'") && !path.startsWith('"')) {
+          fields.add(path);
+        }
+      });
+    } else {
+      const path = expression.trim();
+      if (!path.startsWith("'") && !path.startsWith('"')) {
+        fields.add(path);
+      }
+    }
+  }
+  
+  return Array.from(fields);
+};
+
+// Then in your component, replace the static field list with dynamic extraction:
+
+const { value: entities, loading } = useAsync(async () => {
+  const baseFields = [
+    "kind",
+    "metadata.name",
+    "metadata.namespace",
+    "metadata.title",
+    "metadata.description",
+    "spec.profile.displayName",
+    "spec.profile.email",
+    "spec.type",
+  ];
+
+  // Dynamically extract fields from displayFormat template
+  const templateFields = displayFormat ? extractFieldsFromTemplate(displayFormat) : [];
+  
+  // Combine base fields with template fields (remove duplicates)
+  const allFields = [...new Set([...baseFields, ...templateFields])];
+
+  const { items } = await catalogApi.getEntities(
+    catalogFilter
+      ? { filter: catalogFilter, fields: allFields }
+      : { filter: undefined, fields: allFields }
+  );
+
+  // ... rest of the code
+}, [catalogFilter, displayFormat]); // Add displayFormat as dependency
