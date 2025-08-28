@@ -483,3 +483,23 @@ function createCompute(options: CreateComputeActionOptions) {
 }
 
 export { createCompute };
+
+>>>>>>>>>>>>
+Fifth 
+
+add below 
+handler: async (ctx) => {
+  // Log all input values immediately when action runs
+  ctx.logger.info('=== FORM INPUT VALUES ===');
+  ctx.logger.info(`businessApplicationId: ${ctx.input.businessApplicationId}`);
+  ctx.logger.info(`name: ${ctx.input.name}`);
+  ctx.logger.info(`sourceRepoId: ${ctx.input.sourceRepoId}`);
+  ctx.logger.info(`appType: ${ctx.input.appType}`);
+  ctx.logger.info(`createConfigMap: ${ctx.input.createConfigMap}`);
+  ctx.logger.info(`internetEnabled: ${ctx.input.internetEnabled}`);
+  ctx.logger.info(`cidrsToAllowAccessFrom: ${ctx.input.cidrsToAllowAccessFrom}`);
+  ctx.logger.info(`existingSourceBranchName: ${ctx.input.existingSourceBranchName}`);
+  ctx.logger.info(`skipExistingFileUpdates: ${ctx.input.skipExistingFileUpdates}`);
+  ctx.logger.info('=== END INPUT VALUES ===');
+
+  // Your existing code continues...
