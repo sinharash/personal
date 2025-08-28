@@ -1,0 +1,149 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: create-compute
+  title: Provision ROSA Compute Application
+  description: Build a ROSA compute application
+  tags: [compute, rosa, infrastructure]
+spec:
+  owner: platform-team
+  type: service
+  
+  parameters:
+    - title: Compute Information
+      required:
+        - logicalGroup
+        - name
+        - businessApplicationId
+      properties:
+        logicalGroup:
+          title: Logical Group
+          type: string
+          description: The logical group where the compute will be created
+          ui:field: OwnedEntityPicker
+          ui:options:
+            catalogFilter:
+              - kind: System
+              spec.type: logical-group
+            
+        name:
+          title: Compute Name
+          type: string
+          description: Name for your compute application
+          pattern: '^(?!kube-|openshift-|aws-|open-cluster-management-)[a-zA-Z][a-zA-Z0-9-]*$'
+          ui:help: 'Name cannot start with "kube-", "openshift-", "aws-", or "open-cluster-management-"'
+          
+        businessApplicationId:
+          title: Business Application ID
+          type: string
+          description: The business application identifier
+          
+        sourceRepoId:
+          title: Existing Source Repository ID
+          type: string
+          description: Optional - ID of existing source repository. If empty, one will be created automatically
+
+    - title: Configuration Options
+      properties:
+        java:
+          title: Java
+          type: boolean
+          description: ROSA automation will cater changes specific to the app type
+          default: false
+          
+        createConfigMap:
+          title: Create Config Map
+          type: boolean
+          description: Create a config map file typically used for external properties or config
+          default: false
+          
+        internetEnabled:
+          title: Internet Enabled
+          type: boolean
+          description: Make your app accessible from the public internet, B2C or B2B applications
+          default: false
+
+    - title: GitLab Automation
+      description: When using an existing repository, ROSA assists in pushing some configuration changes
+      dependencies:
+        sourceRepoId:
+          oneOf:
+            - properties:
+                sourceRepoId:
+                  enum: [""]
+            - properties:
+                sourceRepoId:
+                  not:
+                    enum: [""]
+                existingSourceBranchName:
+                  title: Existing Source Branch Name
+                  type: string
+                  description: Enter an existing branch name for the ROSA automation to source from; otherwise, the default branch will be used if none is provided
+                skipExistingFileUpdates:
+                  title: Skip existing file updates
+                  type: boolean
+                  default: false
+              required: []
+
+    - title: Authentication
+      properties:
+        hiddenField:
+          type: string
+          ui:field: GetEntraUserOauth
+          ui:options:
+            requestUserCredentials:
+              secretsKey: USER_OAUTH_TOKEN
+              optional: true
+              scopes:
+                - api://ifc/user
+
+  steps:
+    - id: fetch-logical-group
+      name: Fetching logical group entity...
+      action: catalog:fetch
+      input:
+        entityRef: ${{ parameters.logicalGroup }}
+
+    - id: create-compute
+      name: Creating compute infrastructure...
+      action: cloud-experience:compute:create
+      input:
+        businessApplicationId: ${{ steps['fetch-logical-group'].output.entity.metadata.annotations['solms-id'] }}
+        environment: TEST
+        name: ${{ parameters.name }}
+        sourceRepoId: ${{ parameters.sourceRepoId }}
+        java: ${{ parameters.java }}
+        createConfigMap: ${{ parameters.createConfigMap }}
+        internetEnabled: ${{ parameters.internetEnabled }}
+        existingSourceBranchName: ${{ parameters.existingSourceBranchName }}
+        skipExistingFileUpdates: ${{ parameters.skipExistingFileUpdates }}
+        token: ${{ secrets.USER_OAUTH_TOKEN }}
+
+    - id: register-compute
+      name: Registering compute in catalog...
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['create-compute'].output.repoUrl }}
+        catalogInfoPath: "/catalog-info.yaml"
+
+  output:
+    links:
+      - title: Compute Application Details
+        content: |
+          **Your ROSA Compute Application has been created successfully!**
+          
+          - **Name:** ${{ steps['create-compute'].output.name }}
+          - **Environment:** TEST
+          - **Logical Group:** ${{ parameters.logicalGroup }}
+          - **Source Repository:** ${{ parameters.sourceRepoId || 'Auto-generated' }}
+          
+          **Configuration:**
+          - Java Application: ${{ parameters.java ? 'Yes' : 'No' }}
+          - Config Map: ${{ parameters.createConfigMap ? 'Enabled' : 'Disabled' }}
+          - Internet Access: ${{ parameters.internetEnabled ? 'Enabled' : 'Disabled' }}
+          
+          *Provisioning typically takes **5+ minutes** to complete.*
+          
+          📋 [**View ${{ parameters.name }}**](${{ steps['register-compute'].output.entityRef }}) in Service Catalog
+      - url: ${{ steps['register-compute'].output.entityRef }}
+        title: View in Catalog
