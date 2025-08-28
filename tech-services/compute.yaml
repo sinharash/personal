@@ -56,37 +56,37 @@ spec:
           description: Make your app accessible from the public internet, B2C or B2B applications
           default: false
 
-        # Conditional CIDR field when internetEnabled is true
-        cidrsToAllowAccessFrom:
-          title: CIDRs to allow access from
-          type: string
-          description: Restrict internet access to your app via specific IP addresses or CIDR ranges
-          ui:field: ConditionalField
-          ui:fieldCondition: 
-            property: internetEnabled
-            when: 
-              is: true
-
-        # GitLab Automation fields (conditional)
-        existingSourceBranchName:
-          title: Existing Source Branch Name
-          type: string
-          description: Enter an existing branch name for the ROSA automation to source from; otherwise, the default branch will be used if none is provided
-          ui:field: ConditionalField
-          ui:fieldCondition: 
-            property: sourceRepoId
-            when: 
-              isNot: ""
-          
-        skipExistingFileUpdates:
-          title: Skip existing file updates
-          type: boolean
-          default: false
-          ui:field: ConditionalField
-          ui:fieldCondition: 
-            property: sourceRepoId
-            when: 
-              isNot: ""
+      dependencies:
+        internetEnabled:
+          oneOf:
+            - properties:
+                internetEnabled:
+                  const: false
+            - properties:
+                internetEnabled:
+                  const: true
+                cidrsToAllowAccessFrom:
+                  title: CIDRs to allow access from
+                  type: string
+                  description: Restrict internet access to your app via specific IP addresses or CIDR ranges
+        
+        sourceRepoId:
+          oneOf:
+            - properties:
+                sourceRepoId:
+                  const: ""
+            - properties:
+                sourceRepoId:
+                  minLength: 1
+                existingSourceBranchName:
+                  title: Existing Source Branch Name
+                  type: string
+                  description: Enter an existing branch name for the ROSA automation to source from; otherwise, the default branch will be used if none is provided
+                  
+                skipExistingFileUpdates:
+                  title: Skip existing file updates
+                  type: boolean
+                  default: false
 
         hiddenField:
           type: string
