@@ -4,16 +4,27 @@ metadata:
   name: create-compute
   title: Provision ROSA Compute Application
   description: Build a ROSA compute application
-  tags: [compute, rosa, infrastructure]
+  tags: [compute, rosa, merna]
 spec:
-  owner: platform-team
+  owner: wg119310
   type: service
 
   parameters:
     - title: Create New ROSA Application
       required:
+        - logicalGroup
         - name
       properties:
+        logicalGroup:
+          title: Logical group
+          type: string
+          description: The logical group where the cache will be created
+          ui:field: OwnedEntityPicker
+          ui:options:
+            catalogFilter:
+              - kind: System
+                spec.type: logical-group
+
         name:
           title: Application Name
           type: string
@@ -26,7 +37,7 @@ spec:
           description: Migrating or already have an existing repository, enter ID here. If not a base source code repository will be created for you.
 
         # Configuration checkboxes
-        java:
+        appType:
           title: Java
           type: boolean
           description: ROSA automation will cater changes specific to the app type
@@ -65,8 +76,6 @@ spec:
             when:
               isNot: ""
 
-    - title: Authentication
-      properties:
         hiddenField:
           type: string
           ui:field: GetEntraUserOauth
@@ -78,13 +87,21 @@ spec:
                 - api://ifc/user
 
   steps:
+    - id: fetch-logical-group
+      name: Fetching logical group entity...
+      action: catalog:fetch
+      input:
+        entityRef: ${{ parameters.logicalGroup }}
+
     - id: create-compute
       name: Creating compute infrastructure...
       action: cloud-experience:compute:create
       input:
+        businessApplicationId: ${{ steps['fetch-logical-group'].output.entity.metadata.annotations['solms-id'] }}
+        environment: TEST
         name: ${{ parameters.name }}
         sourceRepoId: ${{ parameters.sourceRepoId }}
-        java: ${{ parameters.java }}
+        appType: ${{ parameters.appType }}
         createConfigMap: ${{ parameters.createConfigMap }}
         internetEnabled: ${{ parameters.internetEnabled }}
         existingSourceBranchName: ${{ parameters.existingSourceBranchName }}
@@ -99,9 +116,16 @@ spec:
 
           - **Name:** ${{ steps['create-compute'].output.name }}
           - **Environment:** TEST
+          - **Logical Group:** ${{ parameters.logicalGroup }}
           - **Source Repository:** ${{ parameters.sourceRepoId || 'Auto-generated' }}
 
           **Configuration:**
-          - Java Application: ${{ parameters.java ? 'Yes' : 'No' }}
+          - Java Application: ${{ parameters.appType ? 'Yes' : 'No' }}
           - Config Map: ${{ parameters.createConfigMap ? 'Enabled' : 'Disabled' }}
           - Internet Access: ${{ parameters.internetEnabled ? 'Enabled' : 'Disabled' }}
+
+          **Your MERNA Compute has begun its provisioning process!**
+
+          _Provisioning typically takes **5+ minutes** to complete._
+
+          📋 [**View ${{ parameters.name }}**] in logical group ${{ parameters.logicalGroup }}
