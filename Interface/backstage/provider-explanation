@@ -1,0 +1,76 @@
+---
+
+## How Context Works (Simple Explanation)
+
+Think of React Context like a **broadcast system**:
+```
+┌─────────────────────────────────────────────────────┐
+│  Provider (the radio station)                       │
+│  - Holds the data                                   │
+│  - Broadcasts it to anyone listening               │
+│                                                     │
+│    ┌─────────────────────────────────────────────┐  │
+│    │  Component A                                │  │
+│    │    ┌─────────────────────────────────────┐  │  │
+│    │    │  Component B                        │  │  │
+│    │    │    ┌─────────────────────────────┐  │  │  │
+│    │    │    │  Component C                │  │  │  │
+│    │    │    │  useContext() ← receives!   │  │  │  │
+│    │    │    └─────────────────────────────┘  │  │  │
+│    │    └─────────────────────────────────────┘  │  │
+│    └─────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+
+without Provider
+// ❌ Error: "useBusinessAppContext must be used within a BusinessAppProvider"
+function MyComponent() {
+  const { businessAppData } = useBusinessAppContext() // 💥 No one is broadcasting!
+}
+
+with Provider
+// ✅ Works!
+<BusinessAppProvider>        {/* 📡 Broadcasting data */}
+  <MyComponent />            {/* 📻 Can receive data */}
+</BusinessAppProvider>
+
+What BusinessAppProvider Does
+function BusinessAppProvider({ children }) {
+  // 1. Gets entity from Backstage's EntityPage context
+  const { entity } = useEntity()
+  
+  // 2. Extracts the solma-id annotation
+  const id = String(entity.metadata?.annotations?.['solma-id'])
+  
+  // 3. Fetches business application data (includes permissionLevels)
+  const { data } = useSuspenseQuery(businessAppQueryOptions({ id }))
+  
+  // 4. Provides this data to all children
+  return (
+    <BusinessAppContext.Provider value={{ businessAppData: data }}>
+      {children}
+    </BusinessAppContext.Provider>
+  )
+}
+
+What createPermissionChecker Does
+Looking at the usage, it likely returns an object with helper methods:
+const permissions = createPermissionChecker(permissionLevels)
+
+// permissionLevels probably looks like:
+// ['OWNER', 'ADMIN', 'VIEWER'] or similar
+
+permissions.hasRole('OWNER')  // true if user is owner
+permissions.hasRole('ADMIN')  // true if user is admin
+```
+
+---
+
+## Final Provider Stack
+
+Your delete card now has this provider structure:
+```
+QueryClientProvider          ← For React Query (useQuery)
+  └── BusinessAppProvider    ← For business app data & permissions
+        └── ExampleDeleteCardContent
+              ├── useDeprovisionResource()     ← uses useQuery
+              └── useBusinessAppContext()      ← gets permissions
