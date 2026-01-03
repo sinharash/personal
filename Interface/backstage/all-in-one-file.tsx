@@ -4,6 +4,7 @@ import { createContext, useContext, ReactNode } from 'react'
 import { useEntity } from '@backstage/plugin-catalog-react'
 import { useQuery } from '@tanstack/react-query'
 import { useApplicationServiceQueryOptions } from '../../v1/features/service-offering/api/application-service-queryoptions'
+import { useBusinessApplicationQueryOptions } from '../../v1/features/business-app/api/queryoptions.business-application'
 import { createPermissionChecker } from '../../v1/utils/permissions'
 
 // Define the shape of our context data
@@ -14,14 +15,17 @@ interface MernaResourceContextType {
   environment: string
   businessAppId: string
   
-  // Application service data
+  // Application service data (for status)
   applicationService: any | null
   status: string
-  isLoading: boolean
   
-  // Permissions
+  // Business application data (for permissions)
+  businessApplication: any | null
   permissions: ReturnType<typeof createPermissionChecker>
   isOwner: boolean
+  
+  // Loading states
+  isLoading: boolean
   
   // Computed flags
   isBeingDeprovisioned: boolean
@@ -48,6 +52,7 @@ interface MernaResourceProviderProps {
 export function MernaResourceProvider({ children }: MernaResourceProviderProps) {
   const { entity } = useEntity()
   const applicationServiceQueryOptions = useApplicationServiceQueryOptions()
+  const businessAppQueryOptions = useBusinessApplicationQueryOptions()
 
   // Extract data from entity using YOUR annotation keys
   const businessAppId = entity.metadata?.annotations?.['hub.merna.sf/business-app-id'] || ''
@@ -57,8 +62,13 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
   const tags = entity.metadata?.tags || []
   const resourceTag = tags[0]?.toUpperCase() || 'SERVICE'
 
-  // Fetch application service data
-  const { data: appServiceData, isLoading } = useQuery(
+  // Query 1: Fetch businessApplication for PERMISSIONS
+  const { data: businessAppData, isLoading: isBusinessAppLoading } = useQuery(
+    businessAppQueryOptions({ id: businessAppId })
+  )
+
+  // Query 2: Fetch applicationService for STATUS
+  const { data: appServiceData, isLoading: isAppServiceLoading } = useQuery(
     applicationServiceQueryOptions({
       businessApplicationId: businessAppId,
       name: name,
@@ -66,18 +76,22 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
     })
   )
 
+  // Extract data from queries
+  const businessApplication = businessAppData?.data?.businessApplication
   const applicationService = appServiceData?.data?.applicationService
   const status = applicationService?.status || ''
 
-  // Get permissions from applicationService
-  const permissionLevels = applicationService?.permissionLevels || []
+  // Get permissions from businessApplication (not applicationService!)
+  const permissionLevels = businessApplication?.permissionLevels || []
   const permissions = createPermissionChecker(permissionLevels)
   const isOwner = permissions.hasRole('OWNER')
 
   // Compute status flags
   const isBeingDeprovisioned = status === 'DEPROVISIONED' || status === 'PROVISIONING'
   const allowedStatus = status === 'PROVISIONED' || status === 'ERROR'
-  const canDeprovision = !!businessAppId && !isBeingDeprovisioned && allowedStatus && isOwner
+  const canDeprovision = !!businessAppId && !isBeingDeprovisioned && allowedStatus
+
+  const isLoading = isBusinessAppLoading || isAppServiceLoading
 
   // Build context value
   const contextValue: MernaResourceContextType = {
@@ -87,9 +101,10 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
     businessAppId,
     applicationService,
     status,
-    isLoading,
+    businessApplication,
     permissions,
     isOwner,
+    isLoading,
     isBeingDeprovisioned,
     canDeprovision,
   }
@@ -102,6 +117,39 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
 }
 
 export { MernaResourceContext }
+```
+
+---
+
+**Visual summary:**
+```
+Entity (from Backstage catalog)
+  └── annotations['hub.merna.sf/business-app-id'] = "394816"
+  └── labels['hub.merna.sf/environment'] = "test"
+  └── metadata.name = "cloud-experience-t-rashcache5"
+  └── tags = ["cache"]
+
+                    ↓ businessAppId = "394816"
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Query 1: businessApplicationQueryOptions({ id: "394816" })     │
+│  Returns: businessApplication                                    │
+│    └── permissionLevels: ['OWNER', 'ADMIN', ...]                │
+│                                                                  │
+│  Used for: isOwner check                                         │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Query 2: applicationServiceQueryOptions({                       │
+│    businessApplicationId: "394816",                              │
+│    name: "cloud-experience-t-rashcache5",                        │
+│    environment: "TEST"                                           │
+│  })                                                              │
+│  Returns: applicationService                                     │
+│    └── status: "PROVISIONED" | "ERROR" | "DEPROVISIONED" | ...  │
+│                                                                  │
+│  Used for: canDeprovision, isBeingDeprovisioned checks          │
+└─────────────────────────────────────────────────────────────────┘
 
 // Now simplify your use-deprovision-resource.ts:
 
