@@ -26,7 +26,9 @@ interface MernaResourceContextType {
   
   // Resource identification
   resourceType: ResourceType
-  resourceId: string // businessAppId or clusterId depending on type
+  businessAppId: string    // V1: used for deprovision mutation
+  // TODO V2: Add clusterId when cluster strategy is implemented
+  // clusterId: string
   
   // Permissions
   isOwner: boolean
@@ -61,17 +63,24 @@ export function useMernaResourceContext() {
 // ANNOTATION DETECTION
 // =============================================================================
 
+interface DetectedResource {
+  type: ResourceType
+  businessAppId: string
+  // TODO V2: Add clusterId when ready
+  // clusterId: string
+}
+
 /**
  * Detect which type of resource this entity represents based on annotations
  */
-function detectResourceType(entity: any): { type: ResourceType; id: string } {
+function detectResourceType(entity: any): DetectedResource {
   const annotations = entity.metadata?.annotations || {}
   
   // V1: Business App based resources (current implementation)
   if (annotations['hub.merna.sf/business-app-id']) {
     return {
       type: 'business-app',
-      id: annotations['hub.merna.sf/business-app-id'],
+      businessAppId: annotations['hub.merna.sf/business-app-id'],
     }
   }
   
@@ -80,14 +89,15 @@ function detectResourceType(entity: any): { type: ResourceType; id: string } {
   if (annotations['hub.merna.sf/cluster']) {
     return {
       type: 'cluster',
-      id: annotations['hub.merna.sf/cluster'],
+      businessAppId: '', // V2 won't use businessAppId
+      // clusterId: annotations['hub.merna.sf/cluster'],
     }
   }
   
   // Unknown resource type
   return {
     type: 'unknown',
-    id: '',
+    businessAppId: '',
   }
 }
 
@@ -95,10 +105,20 @@ function detectResourceType(entity: any): { type: ResourceType; id: string } {
 // V1 STRATEGY: Business App Based Resources
 // =============================================================================
 
+interface StrategyResult {
+  isOwner: boolean
+  status: string
+  isLoading: boolean
+  isBeingDeprovisioned: boolean
+  canDeprovision: boolean
+  error: Error | null
+}
+
 function useBusinessAppStrategy(
   entity: any,
-  resourceId: string
-): Omit<MernaResourceContextType, 'name' | 'resourceTag' | 'environment' | 'resourceType' | 'resourceId'> {
+  businessAppId: string,
+  enabled: boolean
+): StrategyResult {
   const applicationServiceQueryOptions = useApplicationServiceQueryOptions()
   const businessAppQueryOptions = useBusinessApplicationQueryOptions()
 
@@ -111,20 +131,36 @@ function useBusinessAppStrategy(
     data: businessAppData,
     isLoading: isBusinessAppLoading,
     error: businessAppError,
-  } = useQuery(businessAppQueryOptions({ id: resourceId }))
+  } = useQuery({
+    ...businessAppQueryOptions({ id: businessAppId }),
+    enabled: enabled && !!businessAppId,
+  })
 
   // Query 2: Fetch applicationService for STATUS
   const {
     data: appServiceData,
     isLoading: isAppServiceLoading,
     error: appServiceError,
-  } = useQuery(
-    applicationServiceQueryOptions({
-      businessApplicationId: resourceId,
+  } = useQuery({
+    ...applicationServiceQueryOptions({
+      businessApplicationId: businessAppId,
       name: name,
       environment: environment as any,
-    })
-  )
+    }),
+    enabled: enabled && !!businessAppId,
+  })
+
+  // If not enabled, return empty state
+  if (!enabled) {
+    return {
+      isOwner: false,
+      status: '',
+      isLoading: false,
+      isBeingDeprovisioned: false,
+      canDeprovision: false,
+      error: null,
+    }
+  }
 
   // Extract data from queries
   const businessApplication = businessAppData?.data?.businessApplication
@@ -139,10 +175,10 @@ function useBusinessAppStrategy(
   // Compute status flags
   const isBeingDeprovisioned = status === 'DEPROVISIONED' || status === 'PROVISIONING'
   const allowedStatus = status === 'PROVISIONED' || status === 'ERROR'
-  const canDeprovision = !!resourceId && !isBeingDeprovisioned && allowedStatus
+  const canDeprovision = !!businessAppId && !isBeingDeprovisioned && allowedStatus
 
   const isLoading = isBusinessAppLoading || isAppServiceLoading
-  const error = businessAppError || appServiceError || null
+  const error = (businessAppError as Error) || (appServiceError as Error) || null
 
   return {
     isOwner,
@@ -160,21 +196,25 @@ function useBusinessAppStrategy(
 
 function useClusterStrategy(
   entity: any,
-  resourceId: string
-): Omit<MernaResourceContextType, 'name' | 'resourceTag' | 'environment' | 'resourceType' | 'resourceId'> {
+  enabled: boolean
+): StrategyResult {
   // TODO: Implement cluster-based data fetching when API is ready
   // 
   // This will likely involve:
   // 1. A new query hook for cluster data (e.g., useClusterQueryOptions)
   // 2. Different permission structure
   // 3. Different status values
+  // 4. Different mutation for deprovisioning
   //
   // Example structure (update when API is finalized):
   // 
+  // const clusterId = entity.metadata?.annotations?.['hub.merna.sf/cluster']
   // const clusterQueryOptions = useClusterQueryOptions()
-  // const { data: clusterData, isLoading, error } = useQuery(
-  //   clusterQueryOptions({ clusterId: resourceId })
-  // )
+  // 
+  // const { data: clusterData, isLoading, error } = useQuery({
+  //   ...clusterQueryOptions({ clusterId }),
+  //   enabled: enabled && !!clusterId,
+  // })
   // 
   // const cluster = clusterData?.data?.cluster
   // const status = cluster?.status || ''
@@ -186,27 +226,12 @@ function useClusterStrategy(
   //   isLoading,
   //   isBeingDeprovisioned: status === 'DEPROVISIONING',
   //   canDeprovision: isOwner && status === 'ACTIVE',
-  //   error,
+  //   error: null,
   // }
 
-  console.warn('[MernaResourceProvider] Cluster strategy not yet implemented')
-  
-  return {
-    isOwner: false,
-    status: 'UNKNOWN',
-    isLoading: false,
-    isBeingDeprovisioned: false,
-    canDeprovision: false,
-    error: new Error('Cluster resource type not yet implemented'),
+  if (enabled) {
+    console.warn('[MernaResourceProvider] Cluster strategy not yet implemented')
   }
-}
-
-// =============================================================================
-// UNKNOWN STRATEGY: Fallback for unrecognized resource types
-// =============================================================================
-
-function useUnknownStrategy(): Omit<MernaResourceContextType, 'name' | 'resourceTag' | 'environment' | 'resourceType' | 'resourceId'> {
-  console.warn('[MernaResourceProvider] Unknown resource type - no matching annotation found')
   
   return {
     isOwner: false,
@@ -214,7 +239,7 @@ function useUnknownStrategy(): Omit<MernaResourceContextType, 'name' | 'resource
     isLoading: false,
     isBeingDeprovisioned: false,
     canDeprovision: false,
-    error: new Error('Unknown resource type - missing required annotations'),
+    error: enabled ? new Error('Cluster resource type not yet implemented') : null,
   }
 }
 
@@ -230,7 +255,7 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
   const { entity } = useEntity()
 
   // Detect resource type from annotations
-  const { type: resourceType, id: resourceId } = useMemo(
+  const { type: resourceType, businessAppId } = useMemo(
     () => detectResourceType(entity),
     [entity]
   )
@@ -244,9 +269,17 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
 
   // Use appropriate strategy based on resource type
   // Note: All hooks must be called unconditionally (Rules of Hooks)
-  const businessAppData = useBusinessAppStrategy(entity, resourceId)
-  const clusterData = useClusterStrategy(entity, resourceId)
-  const unknownData = useUnknownStrategy()
+  // We use 'enabled' flag to prevent unnecessary API calls
+  const businessAppData = useBusinessAppStrategy(
+    entity,
+    businessAppId,
+    resourceType === 'business-app'
+  )
+  
+  const clusterData = useClusterStrategy(
+    entity,
+    resourceType === 'cluster'
+  )
 
   // Select the correct data based on resource type
   const strategyData = useMemo(() => {
@@ -257,9 +290,16 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
         return clusterData
       case 'unknown':
       default:
-        return unknownData
+        return {
+          isOwner: false,
+          status: 'UNKNOWN',
+          isLoading: false,
+          isBeingDeprovisioned: false,
+          canDeprovision: false,
+          error: new Error('Unknown resource type - missing required annotations'),
+        }
     }
-  }, [resourceType, businessAppData, clusterData, unknownData])
+  }, [resourceType, businessAppData, clusterData])
 
   // Build context value with consistent interface
   const contextValue: MernaResourceContextType = useMemo(
@@ -271,12 +311,13 @@ export function MernaResourceProvider({ children }: MernaResourceProviderProps) 
       
       // Resource identification
       resourceType,
-      resourceId,
+      businessAppId,
+      // TODO V2: Add clusterId here
       
       // Strategy-specific data (same interface for all)
       ...strategyData,
     }),
-    [name, resourceTag, environment, resourceType, resourceId, strategyData]
+    [name, resourceTag, environment, resourceType, businessAppId, strategyData]
   )
 
   return (
@@ -341,3 +382,107 @@ const { resourceType, resourceId } = useMernaResourceContext()
 console.log(`[Debug] Using ${resourceType} strategy with ID: ${resourceId}`)
 
 Does this approach work for your needs? Want me to adjust anything or add more TODO comments for the V2 implementation?
+
+
+
+
+// Now use-deprovision-resource.ts
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  MutationDeprovisionApplicationServiceArgs,
+  useDeprovisionApplicationServiceMutation,
+} from '@gpd-hub-plugin/cloud-experience-common'
+import { useNotify } from '../../../v1/hooks/use-notify'
+import logger from '../../../v1/utils/logger'
+import { useMernaResourceContext } from './merna-resource-provider'
+
+/**
+ * Hook to handle MERNA resource deprovisioning
+ * Must be used within MernaResourceProvider
+ */
+export function useDeprovisionResource() {
+  const {
+    name,
+    resourceTag,
+    environment,
+    businessAppId,    // ← Back to using businessAppId
+    resourceType,
+    isBeingDeprovisioned,
+    canDeprovision,
+    isOwner,
+  } = useMernaResourceContext()
+
+  const { notify } = useNotify()
+  const navigate = useNavigate()
+  const deprovisionMutation = useDeprovisionApplicationServiceMutation()
+
+  /**
+   * Execute deprovision mutation
+   */
+  const handleDeprovision = useCallback(async (): Promise<void> => {
+    // V1: Business App based deprovisioning
+    if (resourceType === 'business-app') {
+      const variables: MutationDeprovisionApplicationServiceArgs = {
+        businessApplicationId: businessAppId,    // ← Used here
+        environment: environment as any,
+        name: name,
+      }
+
+      try {
+        const { errors } = await deprovisionMutation.mutateAsync(variables)
+
+        if (errors) {
+          for (const error of errors) {
+            const reasons = Array.isArray(error.reason) ? error.reason.flat() : [error.reason]
+            for (const reason of reasons) {
+              notify({ severity: 'error', error: new Error(reason) })
+            }
+          }
+          return
+        }
+
+        notify({ message: 'Resource scheduled for deletion 🗑️' })
+      } catch (error) {
+        logger.error('[Delete resource error]', error)
+        notify({ severity: 'error', error: new Error('Failed to delete resource') })
+      } finally {
+        setTimeout(() => {
+          navigate(-1)
+        }, 1000)
+      }
+      return
+    }
+
+    // V2: Cluster based deprovisioning
+    // TODO: Implement when cluster API is ready
+    if (resourceType === 'cluster') {
+      // const clusterVariables = {
+      //   clusterId: clusterId,
+      //   ...
+      // }
+      // await clusterDeprovisionMutation.mutateAsync(clusterVariables)
+      
+      notify({ severity: 'error', error: new Error('Cluster deprovisioning not yet implemented') })
+      return
+    }
+
+    // Unknown resource type
+    notify({ severity: 'error', error: new Error('Cannot deprovision unknown resource type') })
+  }, [businessAppId, environment, name, resourceType, deprovisionMutation, notify, navigate])
+
+  return {
+    name,
+    resourceTag,
+    handleDeprovision,
+    isDeleting: deprovisionMutation.isPending,
+    isBeingDeprovisioned,
+    canDeprovision,
+    isOwner,
+  }
+}
+
+
+//Summary:
+//VariableWhat it isUsed bybusinessAppIdValue from hub.merna.sf/business-app-id annotationV1 queries and mutationresourceType'business-app' or 'cluster' or 'unknown'Strategy selectionnameEntity name/titleBoth V1 and V2environmentFrom hub.merna.sf/environment labelBoth V1 and V2
+//When V2 is ready, you'll add clusterId to the context and use it in the cluster strategy.
