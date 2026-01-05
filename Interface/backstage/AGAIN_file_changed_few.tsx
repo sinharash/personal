@@ -388,3 +388,141 @@ export function ExampleDeleteCard() {
 }
 
 export default ExampleDeleteCard
+
+
+//  now this is resource-page-wrapper but it should work without context 
+
+
+import { ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import Box from '@mui/material/Box'
+import Stack from '@mui/material/Stack'
+import Typography from '@mui/material/Typography'
+import Alert from '@mui/material/Alert'
+import AlertTitle from '@mui/material/AlertTitle'
+import { useTheme, alpha } from '@mui/material/styles'
+import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined'
+import ScheduleIcon from '@mui/icons-material/Schedule'
+import { useDeprovisionResource } from '../../hooks/use-deprovision-resource'
+
+/**
+ * QueryClient configuration
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    },
+  },
+})
+
+/**
+ * Deprovisioning status view - shows when resource is being deprovisioned
+ */
+function DeprovisioningStatusView() {
+  const theme = useTheme()
+  const { name } = useDeprovisionResource()
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 400,
+        py: 6,
+        px: 3,
+      }}
+    >
+      <Box sx={{ position: 'relative', mb: 4 }}>
+        <CloudOffOutlinedIcon
+          sx={{
+            fontSize: 120,
+            color: alpha(theme.palette.text.secondary, 0.3),
+          }}
+        />
+        <Box
+          sx={{
+            position: 'absolute',
+            top: -8,
+            right: -8,
+            backgroundColor: theme.palette.background.paper,
+            borderRadius: '50%',
+            p: 0.5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: theme.shadows[2],
+          }}
+        >
+          <ScheduleIcon
+            sx={{
+              fontSize: 32,
+              color: theme.palette.text.secondary,
+            }}
+          />
+        </Box>
+      </Box>
+
+      <Stack spacing={1} alignItems="center">
+        <Alert severity="info">
+          <AlertTitle>App service is being deprovisioned</AlertTitle>
+          This process may take a while.
+        </Alert>
+
+        {name && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 2 }}>
+            Resource: {name}
+          </Typography>
+        )}
+      </Stack>
+    </Box>
+  )
+}
+
+/**
+ * Content wrapper that checks deprovisioning status
+ */
+function ResourcePageWrapperContent({ children }: { children: ReactNode }) {
+  const { isBeingDeprovisioned, isLoading } = useDeprovisionResource()
+
+  if (isLoading) {
+    return <Typography>Loading...</Typography>
+  }
+
+  if (isBeingDeprovisioned) {
+    return <DeprovisioningStatusView />
+  }
+
+  return <>{children}</>
+}
+
+/**
+ * Main wrapper component for MERNA resource pages
+ * 
+ * Shows deprovisioning status view when resource is being deprovisioned,
+ * otherwise renders children normally.
+ * 
+ * Usage:
+ * <ResourcePageWrapper>
+ *   <ExampleDeleteCard />
+ *   <OtherCards />
+ * </ResourcePageWrapper>
+ */
+interface ResourcePageWrapperProps {
+  children: ReactNode
+}
+
+export function ResourcePageWrapper({ children }: ResourcePageWrapperProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ResourcePageWrapperContent>
+        {children}
+      </ResourcePageWrapperContent>
+    </QueryClientProvider>
+  )
+}
+
+export default ResourcePageWrapper
