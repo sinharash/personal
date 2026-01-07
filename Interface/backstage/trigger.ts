@@ -142,3 +142,10 @@ export function DeleteButton() {
 }
 
 export default DeleteButton
+
+>>>>>
+
+import { DeleteButton } from '../components/deprovision-merna-offering/delete-button'
+
+// In EntityPage, just add:
+<DeleteButton />
