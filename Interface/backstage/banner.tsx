@@ -398,3 +398,227 @@ export const DeprecationBanner: React.FC<DeprecationBannerProps> = ({
     </Paper>
   );
 };
+
+>>>>>>>>>>>
+// very first bold design but button on right side :
+
+// src/components/DeprecationBanner.tsx
+import React from 'react';
+import { Box, Typography, Button, Stack } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import WarningIcon from '@mui/icons-material/Warning';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+
+interface DeprecationBannerProps {
+  title?: string;
+  message?: string;
+  buttonText?: string;
+  newPagePath: string;
+  showIcon?: boolean;
+}
+
+export const DeprecationBanner: React.FC<DeprecationBannerProps> = ({
+  title = "🚨 IMPORTANT: This Page is Being Deprecated 🚨",
+  message = "We've launched a brand new, improved experience! This page will be retired soon. Please switch to the new Create MERNA Resources interface for better features, improved performance, and enhanced functionality.",
+  buttonText = "Switch to New Page Now",
+  newPagePath,
+  showIcon = true,
+}) => {
+  const navigate = useNavigate();
+
+  return (
+    <Box
+      sx={{
+        background: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E53 50%, #FFA500 100%)',
+        color: 'white',
+        p: 3.5,
+        borderRadius: 3,
+        mb: 4,
+        mx: 3,
+        boxShadow: '0 8px 32px rgba(255, 107, 107, 0.4)',
+        border: '3px solid #fff',
+        position: 'relative',
+        overflow: 'hidden',
+        animation: 'pulse 2s ease-in-out infinite',
+        '@keyframes pulse': {
+          '0%, 100%': {
+            boxShadow: '0 8px 32px rgba(255, 107, 107, 0.4)',
+          },
+          '50%': {
+            boxShadow: '0 8px 48px rgba(255, 107, 107, 0.6)',
+          },
+        },
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: '-100%',
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+          animation: 'shimmer 3s infinite',
+        },
+        '@keyframes shimmer': {
+          '0%': { left: '-100%' },
+          '100%': { left: '100%' },
+        },
+      }}
+    >
+      <Stack direction="row" spacing={3} alignItems="center">
+        {/* Warning Icon on the left */}
+        {showIcon && (
+          <Box
+            sx={{
+              animation: 'bounce 1s ease-in-out infinite',
+              '@keyframes bounce': {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              flexShrink: 0,
+            }}
+          >
+            <WarningIcon sx={{ fontSize: '3.5rem', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' }} />
+          </Box>
+        )}
+
+        {/* Content in the middle */}
+        <Stack spacing={1.5} sx={{ flex: 1 }}>
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              fontWeight: 900,
+              textShadow: '2px 2px 4px rgba(0,0,0,0.2)',
+              letterSpacing: '0.5px'
+            }}
+          >
+            {title}
+          </Typography>
+
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              lineHeight: 1.6,
+              textShadow: '1px 1px 2px rgba(0,0,0,0.2)',
+              fontWeight: 400
+            }}
+          >
+            {message}
+          </Typography>
+        </Stack>
+
+        {/* Button on the right */}
+        <Button 
+          variant="contained"
+          size="large"
+          endIcon={<ArrowForwardIcon />}
+          onClick={() => navigate(newPagePath)}
+          sx={{
+            backgroundColor: 'white',
+            color: '#FF6B6B',
+            fontSize: '1rem',
+            fontWeight: 'bold',
+            py: 2,
+            px: 4,
+            borderRadius: 2,
+            textTransform: 'none',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            flexShrink: 0,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              backgroundColor: '#f0f0f0',
+              transform: 'translateX(4px) scale(1.05)',
+              boxShadow: '0 6px 24px rgba(0,0,0,0.3)',
+            },
+            animation: 'buttonPulse 2s ease-in-out infinite',
+            '@keyframes buttonPulse': {
+              '0%, 100%': {
+                transform: 'scale(1)',
+              },
+              '50%': {
+                transform: 'scale(1.05)',
+              },
+            },
+          }}
+        >
+          {buttonText}
+        </Button>
+      </Stack>
+    </Box>
+  );
+};
+
+// same above just change this 
+// Option 1: Blue/Teal (Works well with dark theme)
+
+// Change just the background and border colors:
+sx={{
+  background: 'linear-gradient(135deg, #3a7bd5 0%, #00d2ff 100%)',
+  // ... rest stays the same
+  boxShadow: '0 8px 32px rgba(58, 123, 213, 0.4)',
+  border: '3px solid rgba(255, 255, 255, 0.3)',
+  '@keyframes pulse': {
+    '0%, 100%': {
+      boxShadow: '0 8px 32px rgba(58, 123, 213, 0.4)',
+    },
+    '50%': {
+      boxShadow: '0 8px 48px rgba(58, 123, 213, 0.6)',
+    },
+  },
+}}
+
+// Button color:
+sx={{
+  // ...
+  color: '#3a7bd5',
+}}
+
+// option 2 for 
+//Option 2: Purple/Pink (Matches Backstage theme better)
+
+
+// Change colors to match the "tooling" card aesthetic:
+sx={{
+  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  // ... rest stays the same
+  boxShadow: '0 8px 32px rgba(102, 126, 234, 0.4)',
+  border: '3px solid rgba(255, 255, 255, 0.3)',
+  '@keyframes pulse': {
+    '0%, 100%': {
+      boxShadow: '0 8px 32px rgba(102, 126, 234, 0.4)',
+    },
+    '50%': {
+      boxShadow: '0 8px 48px rgba(102, 126, 234, 0.6)',
+    },
+  },
+}}
+
+// Button color:
+sx={{
+  // ...
+  color: '#667eea',
+}}
+
+// option 3
+//Option 3: Amber/Gold (Matches the tan/beige tooling card)
+
+// More subtle, matches the tooling card color you mentioned:
+sx={{
+  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+  // ... rest stays the same
+  boxShadow: '0 8px 32px rgba(245, 158, 11, 0.4)',
+  border: '3px solid rgba(255, 255, 255, 0.3)',
+  '@keyframes pulse': {
+    '0%, 100%': {
+      boxShadow: '0 8px 32px rgba(245, 158, 11, 0.4)',
+    },
+    '50%': {
+      boxShadow: '0 8px 48px rgba(245, 158, 11, 0.6)',
+    },
+  },
+}}
+
+// Button color:
+sx={{
+  // ...
+  color: '#f59e0b',
+}}
