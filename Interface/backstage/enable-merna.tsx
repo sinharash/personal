@@ -337,3 +337,11 @@ export const EnableMerna: React.FC = () => {
     </Tooltip>
   );
 };
+
+1. I want Enable button to be enabled only if user is part of the contact list , if code is checking already , otherwise it should be disabled and user should not be able to see the button , I can add many other things later who and who else can see the button but currently whoever is in contact list can see the button
+
+2. if user is able to see the button then currently if he clicks all these pop-up starts happening and he keep clicking on, I do not want all those dialogs, it needs to go away. 
+
+3. simply, when user clicks on Enable button , it routes it to a software template which is called create workspace. The path is : /create/templates/default/merna-workspace-create (you can see the path of the template in screenshot too). The template , you can see we have a field called SOLMA , I want that field to be filled with soma id ,  I will be sending you template code but we are not suppose to change that code, and also how the template looks like I am sending that screenshot as well. You get the ref and when forward to url , you can pass the form data from query parameter with solma I guess , when value the link to it then it will know where you came from and guess it will have the solma filled. I am just throwing my idea but you can suggest any good way then welcome. 
+
+4. Have any other question ?
