@@ -843,3 +843,5 @@ export const CatalogFilters = () => {
 };
 
 export default CatalogFilters;
+
+I  need to display member of which includes all entities that you are either owner or developer . If you can take a look in all three files and if can also check backstage documentation , and see if I have made the changes right , is it correct plugin to make changes to ? If you checked it and think that is correct then look into frontend screenshot under Additional Filters, 1. If can check the logic is right . 2. Look at the content , Additional filter , Member of says 3 but Memberof logical-group Systems (5) are there , so which one is correct. 3. I would like the style exactly the way Personal is , color and everything . 4. When I click Member of then it keeps showing me as I clicked on All , when click again then shows me Memberof logical=group Systems (5) , and click again then again member of , once click on Member of then click on All then All does not work , but when I click on Owned and then click on All then it works. 
